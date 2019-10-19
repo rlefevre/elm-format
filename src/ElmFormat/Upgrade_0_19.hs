@@ -24,6 +24,7 @@ import ElmFormat.Mapping
 import ElmVersion
 import Reporting.Annotation (Annotated(A))
 
+import qualified AST.Annotated as Annotated
 import qualified Data.Bimap as Bimap
 import qualified Data.List as List
 import qualified Data.Map.Strict as Dict
@@ -160,13 +161,14 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
             -- the imports merged in from the upgrade definition
             ImportInfo.fromModule modu
 
+        transformTopLevelStructure ::
+            Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
+            -> Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
         transformTopLevelStructure structure =
+            mapType (transformType upgradeDefinition) $
             case structure of
                 Entry (A region (Definition name args comments expr)) ->
                     Entry (A region (Definition name args comments $ addAnnotation noRegion' $ transform' upgradeDefinition importInfo $ stripAnnotation expr))
-
-                Entry (A region (TypeAnnotation name (pre, typ))) ->
-                    Entry (A region (TypeAnnotation name (pre, transformType upgradeDefinition typ)))
 
                 _ -> structure
 
@@ -346,25 +348,25 @@ transform' upgradeDefinition importInfo =
 
 transformType ::
     UpgradeDefinition
-    -> Type (MatchedNamespace [UppercaseIdentifier])
-    -> Type (MatchedNamespace [UppercaseIdentifier])
+    -> Type' (MatchedNamespace [UppercaseIdentifier])
+    -> Type' (MatchedNamespace [UppercaseIdentifier])
 transformType upgradeDefinition =
     bottomUpType (transformType' upgradeDefinition)
 
 
 transformType' ::
     UpgradeDefinition
-    -> Type (MatchedNamespace [UppercaseIdentifier])
-    -> Type (MatchedNamespace [UppercaseIdentifier])
+    -> Type' (MatchedNamespace [UppercaseIdentifier])
+    -> Type' (MatchedNamespace [UppercaseIdentifier])
 transformType' upgradeDefinition typ = case typ of
-    A firstRegion (TypeConstruction (NamedConstructor (MatchedImport ctorNs, ctorName)) args) ->
+    TypeConstruction (NamedConstructor (MatchedImport ctorNs, ctorName)) args ->
         case Dict.lookup (ctorNs, ctorName) (_typeReplacements upgradeDefinition) of
             Just (argOrder, newTyp) ->
                 let
                     inlines =
-                        Dict.fromList $ zip argOrder (fmap snd args)
+                        Dict.fromList $ zip argOrder (fmap (RA.drop . snd) args)
                 in
-                inlineTypeVars inlines $ noRegion newTyp
+                inlineTypeVars inlines newTyp
 
             Nothing -> typ
 
@@ -618,39 +620,39 @@ inlineVars isLocal insertMultiline mappings expr =
 
 
 inlineTypeVars ::
-    Dict.Map LowercaseIdentifier (Type ns)
-    -> Type ns
-    -> Type ns
+    Dict.Map LowercaseIdentifier (Type' ns)
+    -> Type' ns
+    -> Type' ns
 inlineTypeVars mappings =
     bottomUpType (inlineTypeVars' mappings)
 
 
 inlineTypeVars' ::
-    Dict.Map LowercaseIdentifier (Type ns)
-    -> Type ns
-    -> Type ns
-inlineTypeVars' mappings (A region typ) =
+    Dict.Map LowercaseIdentifier (Type' ns)
+    -> Type' ns
+    -> Type' ns
+inlineTypeVars' mappings typ =
     case typ of
         TypeVariable ref ->
             case Dict.lookup ref mappings of
                 Just replacement -> replacement
-                Nothing -> A region typ
+                Nothing -> typ
 
-        _ -> A region typ
+        _ -> typ
 
 
 {- Applies a transformation function to a Type from the bottom up. -}
-bottomUpType :: (Type ns -> Type ns) -> Type ns -> Type ns
-bottomUpType f (A region typ) =
+bottomUpType :: (Type' ns -> Type' ns) -> Type' ns -> Type' ns
+bottomUpType f typ =
     f $
     case typ of
-        UnitType _ -> A region typ
-        TypeVariable _ -> A region typ
-        TypeConstruction ctor args -> A region $ TypeConstruction ctor (fmap (fmap $ bottomUpType f) args)
-        TypeParens t -> A region $ TypeParens (fmap (bottomUpType f) t)
-        TupleType ts -> A region $ TupleType (fmap (fmap $ fmap $ bottomUpType f) ts)
-        RecordType base fields cs ml -> A region $ RecordType base (fmap (fmap $ fmap $ fmap $ fmap $ bottomUpType f) fields) cs ml
-        FunctionType first rest ml -> A region $ FunctionType (fmap (bottomUpType f) first) (fmap (fmap $ fmap $ fmap $ bottomUpType f) rest) ml
+        UnitType _ -> typ
+        TypeVariable _ -> typ
+        TypeConstruction ctor args -> TypeConstruction ctor (fmap (fmap $ fmap $ bottomUpType f) args)
+        TypeParens t -> TypeParens (fmap (fmap $ bottomUpType f) t)
+        TupleType ts -> TupleType (fmap (fmap $ fmap $ fmap $ bottomUpType f) ts)
+        RecordType base fields cs ml -> RecordType base (fmap (fmap $ fmap $ fmap $ fmap $ fmap $ bottomUpType f) fields) cs ml
+        FunctionType first rest ml -> FunctionType (fmap (fmap $ bottomUpType f) first) (fmap (fmap $ fmap $ fmap $ fmap $ bottomUpType f) rest) ml
 
 
 destructureFirstMatch :: PreCommented UExpr -> [ (PreCommented (Pattern (MatchedNamespace [UppercaseIdentifier])), UExpr) ] -> UExpr -> UExpr

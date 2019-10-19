@@ -45,7 +45,6 @@ instance MapNamespace a b (Declaration a e) (Declaration b e) where
         Fixity a pre n post op -> Fixity a pre n post (fmap f op)
         Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn
 
-
 instance MapReferences a b (Declaration a e) (Declaration b e) where
     mapReferences fu fl = \case
         Definition first rest comments e -> Definition (mapReferences fu fl first) (mapReferences fu fl rest) comments e
@@ -55,6 +54,17 @@ instance MapReferences a b (Declaration a e) (Declaration b e) where
         PortAnnotation name comments typ -> PortAnnotation name comments (mapReferences fu fl typ)
         PortDefinition name comments expr -> PortDefinition name comments expr
         Fixity a pre n post op -> Fixity a pre n post (mapReferences fu fl op)
+        Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn
+
+instance MapType (Type' ns) (Type' ns) (Declaration ns expr) (Declaration ns expr) where
+    mapType f = \case
+        Definition first rest comments e -> Definition first rest comments e
+        TypeAnnotation name typ -> TypeAnnotation name (mapType f typ)
+        Datatype nameWithArgs tags -> Datatype nameWithArgs tags
+        TypeAlias comments name typ -> TypeAlias comments name typ
+        PortAnnotation name comments typ -> PortAnnotation name comments typ
+        PortDefinition name comments expr -> PortDefinition name comments expr
+        Fixity a pre n post op -> Fixity a pre n post op
         Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn
 
 
@@ -80,3 +90,6 @@ data TopLevelStructure a
     | BodyComment Comment
     | Entry (A.Located a)
     deriving (Eq, Show, Functor)
+
+instance MapType a b t1 t2 => MapType a b (TopLevelStructure t1) (TopLevelStructure t2) where
+    mapType = fmap . mapType

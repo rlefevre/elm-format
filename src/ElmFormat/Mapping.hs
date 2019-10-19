@@ -90,3 +90,28 @@ instance MapReferences a b (Type' a) (Type' b) where
 
 
 -- TODO: add MapAnnotation
+
+
+
+class MapType t1 t2 a1 a2 where
+    mapType :: (t1 -> t2) -> a1 -> a2
+
+instance MapType a b t1 t2 => MapType a b (A.Annotated ann t1) (A.Annotated ann t2) where
+    mapType f (A.A ann t) = A.A ann (mapType f t)
+    {-# INLINE mapType #-}
+
+instance MapType a b t1 t2 => MapType a b (Commented t1) (Commented t2) where
+    mapType f (Commented pre t post) = Commented pre (mapType f t) post
+    {-# INLINE mapType #-}
+
+instance MapType a b t1 t2 => MapType a b (PreCommented t1) (PreCommented t2) where
+    mapType f (c, t) = (c, mapType f t)
+    {-# INLINE mapType #-}
+
+instance MapType a b t1 t2 => MapType a b (WithEol t1) (WithEol t2) where
+    mapType f (WithEol t eol) = WithEol (mapType f t) eol
+    {-# INLINE mapType #-}
+
+instance MapType (Type' a) (Type' b) (Type' a) (Type' b) where
+    mapType f t = f t
+    {-# INLINE mapType #-}
