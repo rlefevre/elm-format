@@ -62,6 +62,12 @@ data DetailedListing = DetailedListing
     }
     deriving (Eq, Show)
 
+instance Semigroup DetailedListing where
+    (DetailedListing av ao at) <> (DetailedListing bv bo bt) = DetailedListing (av <> bv) (ao <> bo) (at <> bt)
+
+instance Monoid DetailedListing where
+    mempty = DetailedListing mempty mempty mempty
+
 
 type SourceSettings =
   [(Commented LowercaseIdentifier, Commented UppercaseIdentifier)]

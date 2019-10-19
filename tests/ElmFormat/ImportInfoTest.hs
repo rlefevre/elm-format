@@ -20,7 +20,7 @@ tests =
             i
                 |> fmap (\(a, b, c) -> (fmap UppercaseIdentifier a, ImportMethod (fmap (\x -> ([], ([], UppercaseIdentifier x))) b) ([], ([], c))))
                 |> Dict.fromList
-                |> ImportInfo.fromImports
+                |> ImportInfo.fromImports (const mempty)
     in
     [ testGroup "_directImports" $
         let

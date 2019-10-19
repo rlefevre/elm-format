@@ -18,6 +18,7 @@ values =
     , 8 + 9
     , (10 + 11) 12
     , ()
+    , "a3value"
     ]
 
 
@@ -53,6 +54,7 @@ cases s =
 typeChange :
     A.NewType String Int
     -> B.NewType ( {}, Never, Never )
+    -> { a3type : () }
     -> ()
 typeChange _ _ =
     ()

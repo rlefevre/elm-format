@@ -69,13 +69,31 @@ data UpgradeDefinition =
         }
     deriving Show
 
+knownContents :: UpgradeDefinition -> [UppercaseIdentifier] -> DetailedListing
+knownContents upgradeDefinition ns =
+    DetailedListing
+        { values =
+            Dict.fromList
+            $ fmap (flip (,) (Commented [] () []) . LowercaseIdentifier . snd)
+            $ filter ((==) ns . fst)
+            $ Dict.keys
+            $ _replacements upgradeDefinition
+        , operators = mempty
+        , types =
+            Dict.fromList
+            $ fmap (flip (,) (Commented [] ([], ClosedListing) []) . snd)
+            $ filter ((==) ns . fst)
+            $ Dict.keys
+            $ _typeReplacements upgradeDefinition
+        }
+
 
 parseUpgradeDefinition :: Text.Text -> Either () UpgradeDefinition
 parseUpgradeDefinition definitionText =
     case ElmFormat.Parse.parse Elm_0_19 definitionText of
         Result.Result _ (Result.Ok modu@(Module _ _ _ (_, imports) body)) ->
             let
-                importInfo = ImportInfo.fromModule modu
+                importInfo = ImportInfo.fromModule (const mempty) modu
 
                 makeName :: String -> Maybe ([UppercaseIdentifier], String)
                 makeName name =
@@ -159,7 +177,7 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
             -- Note: this is the info used for matching references in the
             -- source file being transformed, and should NOT include
             -- the imports merged in from the upgrade definition
-            ImportInfo.fromModule modu
+            ImportInfo.fromModule (knownContents upgradeDefinition) modu
 
         transformTopLevelStructure ::
             Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
@@ -224,7 +242,7 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
                 (usages finalBody)
 
         finalImportInfo =
-            ImportInfo.fromImports $ fmap snd finalImports
+            ImportInfo.fromImports (const mempty) $ fmap snd finalImports
     in
     finalBody
         |> fmap (mapReferences' (applyReferences finalImportInfo))

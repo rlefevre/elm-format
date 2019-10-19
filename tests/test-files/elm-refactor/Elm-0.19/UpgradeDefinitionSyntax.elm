@@ -2,6 +2,7 @@ port module UpgradDefinitionSyntax exposing (x)
 
 import A
 import A2 exposing (a2value)
+import A3 exposing (..)
 import B exposing (OldType)
 
 
@@ -20,6 +21,7 @@ values =
     , A.function 8 9
     , A.function 10 11 12
     , a2value
+    , a3value
     ]
 
 
@@ -50,6 +52,7 @@ cases s =
 typeChange :
     A.Type Int String
     -> OldType {} Never
+    -> A3Type
     -> ()
 typeChange _ _ =
     ()

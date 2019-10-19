@@ -2,7 +2,6 @@ module ElmFormat.ImportInfo (ImportInfo(..), fromModule, fromImports) where
 
 import AST.V0_16
 import AST.Variable (Listing(..))
-import Data.Maybe (fromMaybe)
 import Elm.Utils ((|>))
 
 import qualified AST.Module
@@ -22,51 +21,56 @@ data ImportInfo =
     deriving Show
 
 
-fromModule :: AST.Module.Module -> ImportInfo
-fromModule modu =
-    fromImports (fmap snd $ snd $ AST.Module.imports modu)
+fromModule ::
+    ([UppercaseIdentifier] -> AST.Module.DetailedListing)
+    -> AST.Module.Module
+    -> ImportInfo
+fromModule knownModuleContents modu =
+    fromImports knownModuleContents (fmap snd $ snd $ AST.Module.imports modu)
 
 
-fromImports :: Dict.Map [UppercaseIdentifier] AST.Module.ImportMethod -> ImportInfo
-fromImports imports =
+fromImports ::
+    ([UppercaseIdentifier] -> AST.Module.DetailedListing)
+    -> Dict.Map [UppercaseIdentifier] AST.Module.ImportMethod
+    -> ImportInfo
+fromImports knownModuleContents imports =
     let
         -- these are things we know will get exposed for certain modules when we see "exposing (..)"
         -- only things that are currently useful for Elm 0.19 upgrade are included
-        knownModuleContents :: [UppercaseIdentifier] -> Maybe AST.Module.DetailedListing
-        knownModuleContents moduleName =
+        moduleContents :: [UppercaseIdentifier] -> AST.Module.DetailedListing
+        moduleContents moduleName =
             case (\(UppercaseIdentifier x) -> x) <$> moduleName of
                 ["Html", "Attributes"] ->
-                    Just $ AST.Module.DetailedListing
+                    AST.Module.DetailedListing
                         (Dict.fromList $ fmap (\x -> (LowercaseIdentifier x, Commented [] () [])) $
                             [ "style"
                             ]
                         )
                         mempty
                         mempty
-                _ -> Nothing
+                _ -> knownModuleContents moduleName
 
         getExposedValues moduleName (AST.Module.ImportMethod _ (_, (_, listing))) =
             Dict.fromList $ fmap (flip (,) moduleName) $
             case listing of
                 ClosedListing -> []
-                OpenListing _ -> fromMaybe [] $ Dict.keys . AST.Module.values <$> knownModuleContents moduleName
+                OpenListing _ -> Dict.keys $ AST.Module.values $ moduleContents moduleName
                 ExplicitListing details _ -> Dict.keys $ AST.Module.values details
 
         exposed =
             -- TODO: mark ambiguous names if multiple modules expose them
             Dict.foldlWithKey (\a k v -> Dict.union a $ getExposedValues k v) mempty imports
 
+        getExposedTypes moduleName (AST.Module.ImportMethod _ (_, (_, listing))) =
+            Dict.fromList $ fmap (flip (,) moduleName) $
+                case listing of
+                    ClosedListing -> []
+                    OpenListing _ -> Dict.keys $ AST.Module.types $ moduleContents moduleName
+                    ExplicitListing details _ -> Dict.keys $ AST.Module.types details
+
         exposedTypes =
-            let
-                step dict moduleName (AST.Module.ImportMethod _ (_, (_, listing))) =
-                    case listing of
-                        ExplicitListing (AST.Module.DetailedListing _ _ exposedTypes) _ ->
-                            Dict.union dict
-                                (Dict.fromList $ fmap (\typeName -> (typeName, moduleName)) $ Dict.keys exposedTypes)
-                        OpenListing _ -> dict
-                        ClosedListing -> dict
-            in
-            Dict.foldlWithKey step mempty imports
+            -- TODO: mark ambiguous names if multiple modules expose them
+            Dict.foldlWithKey (\a k v -> Dict.union a $ getExposedTypes k v) mempty imports
 
         aliases =
             let

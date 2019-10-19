@@ -349,7 +349,7 @@ formatModuleHeader elmVersion addDefaultHeader modu =
               formatModuleLine elmVersion sortedExports srcTag name moduleSettings preExposing postExposing
 
       docs =
-          fmap (formatDocComment elmVersion (ImportInfo.fromModule modu)) $ RA.drop $ AST.Module.docs modu
+          fmap (formatDocComment elmVersion (ImportInfo.fromModule (const mempty) modu)) $ RA.drop $ AST.Module.docs modu
 
       imports =
           formatImports elmVersion modu
@@ -529,7 +529,7 @@ formatModule elmVersion addDefaultHeader spacing modu =
               [ initialComments'
               , formatModuleHeader elmVersion addDefaultHeader modu
               , List.replicate spaceBeforeBody blankLine
-              , maybeToList $ formatModuleBody spacing elmVersion (ImportInfo.fromModule modu) (AST.Module.body modu)
+              , maybeToList $ formatModuleBody spacing elmVersion (ImportInfo.fromModule (const mempty) modu) (AST.Module.body modu)
               ]
 
 
