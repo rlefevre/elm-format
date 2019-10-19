@@ -60,9 +60,9 @@ instance MapType (Type' ns) (Type' ns) (Declaration ns expr) (Declaration ns exp
     mapType f = \case
         Definition first rest comments e -> Definition first rest comments e
         TypeAnnotation name typ -> TypeAnnotation name (mapType f typ)
-        Datatype nameWithArgs tags -> Datatype nameWithArgs tags
-        TypeAlias comments name typ -> TypeAlias comments name typ
-        PortAnnotation name comments typ -> PortAnnotation name comments typ
+        Datatype nameWithArgs tags -> Datatype nameWithArgs (fmap (fmap $ fmap $ fmap $ mapType f) tags)
+        TypeAlias comments name typ -> TypeAlias comments name (mapType f typ)
+        PortAnnotation name comments typ -> PortAnnotation name comments (mapType f typ)
         PortDefinition name comments expr -> PortDefinition name comments expr
         Fixity a pre n post op -> Fixity a pre n post op
         Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn

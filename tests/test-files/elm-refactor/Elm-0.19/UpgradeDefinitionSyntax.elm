@@ -1,4 +1,4 @@
-module UpgradDefinitionSyntax exposing (x)
+port module UpgradDefinitionSyntax exposing (x)
 
 import A
 import A2 exposing (a2value)
@@ -53,3 +53,14 @@ typeChange :
     -> ()
 typeChange _ _ =
     ()
+
+
+type alias TypeAliasChange x =
+    A.Type x ()
+
+
+type TypeChange y
+    = TypeChange { value : A.Type () y }
+
+
+port portTypeChange : () -> Sub (A.Type String Never)
