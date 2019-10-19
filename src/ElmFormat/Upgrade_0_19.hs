@@ -350,15 +350,7 @@ transformType ::
     UpgradeDefinition
     -> Type' (MatchedNamespace [UppercaseIdentifier])
     -> Type' (MatchedNamespace [UppercaseIdentifier])
-transformType upgradeDefinition =
-    bottomUpType (transformType' upgradeDefinition)
-
-
-transformType' ::
-    UpgradeDefinition
-    -> Type' (MatchedNamespace [UppercaseIdentifier])
-    -> Type' (MatchedNamespace [UppercaseIdentifier])
-transformType' upgradeDefinition typ = case typ of
+transformType upgradeDefinition typ = case typ of
     TypeConstruction (NamedConstructor (MatchedImport ctorNs, ctorName)) args ->
         case Dict.lookup (ctorNs, ctorName) (_typeReplacements upgradeDefinition) of
             Just (argOrder, newTyp) ->
@@ -366,7 +358,7 @@ transformType' upgradeDefinition typ = case typ of
                     inlines =
                         Dict.fromList $ zip argOrder (fmap (RA.drop . snd) args)
                 in
-                inlineTypeVars inlines newTyp
+                mapType (inlineTypeVars inlines) newTyp
 
             Nothing -> typ
 
@@ -623,15 +615,7 @@ inlineTypeVars ::
     Dict.Map LowercaseIdentifier (Type' ns)
     -> Type' ns
     -> Type' ns
-inlineTypeVars mappings =
-    bottomUpType (inlineTypeVars' mappings)
-
-
-inlineTypeVars' ::
-    Dict.Map LowercaseIdentifier (Type' ns)
-    -> Type' ns
-    -> Type' ns
-inlineTypeVars' mappings typ =
+inlineTypeVars mappings typ =
     case typ of
         TypeVariable ref ->
             case Dict.lookup ref mappings of
@@ -639,20 +623,6 @@ inlineTypeVars' mappings typ =
                 Nothing -> typ
 
         _ -> typ
-
-
-{- Applies a transformation function to a Type from the bottom up. -}
-bottomUpType :: (Type' ns -> Type' ns) -> Type' ns -> Type' ns
-bottomUpType f typ =
-    f $
-    case typ of
-        UnitType _ -> typ
-        TypeVariable _ -> typ
-        TypeConstruction ctor args -> TypeConstruction ctor (fmap (fmap $ fmap $ bottomUpType f) args)
-        TypeParens t -> TypeParens (fmap (fmap $ bottomUpType f) t)
-        TupleType ts -> TupleType (fmap (fmap $ fmap $ fmap $ bottomUpType f) ts)
-        RecordType base fields cs ml -> RecordType base (fmap (fmap $ fmap $ fmap $ fmap $ fmap $ bottomUpType f) fields) cs ml
-        FunctionType first rest ml -> FunctionType (fmap (fmap $ bottomUpType f) first) (fmap (fmap $ fmap $ fmap $ fmap $ bottomUpType f) rest) ml
 
 
 destructureFirstMatch :: PreCommented UExpr -> [ (PreCommented (Pattern (MatchedNamespace [UppercaseIdentifier])), UExpr) ] -> UExpr -> UExpr

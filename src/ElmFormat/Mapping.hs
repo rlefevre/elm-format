@@ -24,7 +24,7 @@ instance MapNamespace a b t1 t2 => MapNamespace a b (PreCommented t1) (PreCommen
     {-# INLINE mapNamespace #-}
 
 instance MapNamespace a b t1 t2 => MapNamespace a b (List t1) (List t2) where
-    mapNamespace f ts = fmap (mapNamespace f) ts
+    mapNamespace f = fmap (mapNamespace f)
     {-# INLINE mapNamespace #-}
 
 instance MapNamespace a b (Type' a) (Type' b) where
@@ -69,7 +69,7 @@ instance MapReferences a b t1 t2 => MapReferences a b (Pair x t1) (Pair x t2) wh
     {-# INLINE mapReferences #-}
 
 instance MapReferences a b t1 t2 => MapReferences a b (List t1) (List t2) where
-    mapReferences fu fl ts = fmap (mapReferences fu fl) ts
+    mapReferences fu fl = fmap (mapReferences fu fl)
     {-# INLINE mapReferences #-}
 
 instance MapReferences a b (TypeConstructor a) (TypeConstructor b) where
@@ -112,6 +112,23 @@ instance MapType a b t1 t2 => MapType a b (WithEol t1) (WithEol t2) where
     mapType f (WithEol t eol) = WithEol (mapType f t) eol
     {-# INLINE mapType #-}
 
-instance MapType (Type' a) (Type' b) (Type' a) (Type' b) where
-    mapType f t = f t
+instance MapType a b t1 t2 => MapType a b (Pair x t1) (Pair x t2) where
+    mapType f (Pair k v ml) = Pair k (mapType f v) ml
     {-# INLINE mapType #-}
+
+instance MapType a b t1 t2 => MapType a b (List t1) (List t2) where
+    mapType f = fmap (mapType f)
+    {-# INLINE mapType #-}
+
+instance MapType (Type' ns) (Type' ns) (Type' ns) (Type' ns) where
+    mapType f typ =
+        -- This does a bottom-up traversal of the Type
+        f $
+        case typ of
+            UnitType _ -> typ
+            TypeVariable _ -> typ
+            TypeConstruction ctor args -> TypeConstruction ctor (mapType f args)
+            TypeParens t -> TypeParens (mapType f t)
+            TupleType ts -> TupleType (mapType f ts)
+            RecordType base fields cs ml -> RecordType base (mapType f fields) cs ml
+            FunctionType first rest ml -> FunctionType (mapType f first) (mapType f rest) ml
