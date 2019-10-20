@@ -19,32 +19,32 @@ type Expression ns ann =
 type TopLevelStructure ns ann =
     AST.Declaration.TopLevelStructure (Declaration ns (Expression ns ann))
 
-
 instance MapNamespace a b (TopLevelStructure a ann) (TopLevelStructure b ann) where
-    mapNamespace f =
+    mapNamespace f tls =
         let
             x d =
               d''
               where
-                  d' :: Declaration a (Fix (AnnotatedExpression b ann))
-                  d' = fmap (mapNamespace f) d
+                  d' :: Declaration a (Expression b ann)
+                  d' = fmap (\x -> mapNamespace f x) d
 
-                  d'' :: Declaration b (Fix (AnnotatedExpression b ann))
+                  d'' :: Declaration b (Expression b ann)
                   d'' = mapNamespace f d'
         in
-        fmap x
-
+        fmap x tls
+    {-# INLINE mapNamespace #-}
 
 instance MapReferences a b (TopLevelStructure a ann) (TopLevelStructure b ann) where
-    mapReferences fu fl =
+    mapReferences fu fl tls =
         let
             x d =
               d''
               where
-                  d' :: Declaration a (Fix (AnnotatedExpression b ann))
-                  d' = fmap (mapReferences fu fl) d
+                  d' :: Declaration a (Expression b ann)
+                  d' = fmap (\x -> mapReferences fu fl x) d
 
-                  d'' :: Declaration b (Fix (AnnotatedExpression b ann))
+                  d'' :: Declaration b (Expression b ann)
                   d'' = mapReferences fu fl d'
         in
-        fmap x
+        fmap x tls
+    {-# INLINE mapReferences #-}
