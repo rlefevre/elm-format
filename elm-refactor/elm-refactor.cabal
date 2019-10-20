@@ -1,0 +1,60 @@
+cabal-version: 2.4
+
+Name: elm-refactor
+version: 0.0.0
+
+Synopsis:
+    Transforms Elm source code
+Description:
+    Transforms Elm source code
+
+Homepage:
+    https://elm-lang.org
+
+License: BSD-3-Clause
+License-file: LICENSE
+
+Author:     Aaron VonderHaar
+Maintainer: gruen0aermel@gmail.com
+Copyright:  See https://github.com/avh4/elm-format/blob/master/LICENSE
+
+Category: Build Tool
+
+build-type: Simple
+
+Extra-source-files: README.md
+
+source-repository head
+    type:     git
+    location: git://github.com/avh4/elm-format.git
+
+
+executable elm-refactor
+
+    ghc-options:
+        -threaded -O2 -Wall -Wno-name-shadowing
+
+    default-language: Haskell2010
+
+    default-extensions:
+        OverloadedStrings
+
+    hs-source-dirs:
+        src
+
+    main-is:
+        Main.hs
+
+    other-modules:
+        ElmRefactor.Cli
+        ElmRefactor.CliFlags
+        Prelude
+
+    build-depends:
+        ansi-wl-pprint >= 0.6.8.2 && < 0.7,
+        base-noprelude >= 4.12.0.0 && < 5,
+        free >= 5.1.1 && < 6,
+        optparse-applicative >= 0.14.3.0 && < 0.15,
+        relude >= 0.4.0 && < 0.5,
+        text >= 1.2.3.1 && < 2,
+        elm-format

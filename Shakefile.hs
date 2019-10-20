@@ -81,11 +81,14 @@ main = do
 
     elmRefactor %> \out -> do
         libFiles <- getDirectoryFiles "" sourceFilesPattern
-        sourceFiles <- getDirectoryFiles "" [ "src-elm-refactor//*.hs" ]
+        sourceFiles <- getDirectoryFiles ""
+            [ "elm-refactor/elm-refactor.cabal"
+            , "elm-refactor/src//*.hs"
+            ]
         need libFiles
         need sourceFiles
         need generatedSourceFiles
-        cmd_ "stack build elm-format:exe:elm-refactor --test --no-run-tests"
+        cmd_ "stack build elm-refactor:exe:elm-refactor"
 
     --
     -- Haskell tests
