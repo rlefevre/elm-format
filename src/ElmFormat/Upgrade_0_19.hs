@@ -184,12 +184,13 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
             Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
             -> Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
         transformTopLevelStructure structure =
-            mapType (transformType upgradeDefinition) $
-            case structure of
-                Entry (A region (Definition name args comments expr)) ->
-                    Entry (A region (Definition name args comments $ mapAnnotation (const noRegion') $ transform' upgradeDefinition importInfo $ mapAnnotation (const ()) expr))
-
-                _ -> structure
+            let
+                s' :: Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
+                s' = mapType (transformType upgradeDefinition) structure
+                s'' :: Annotated.TopLevelStructure (MatchedNamespace [UppercaseIdentifier]) Region.Region
+                s'' = mapExpression (mapAnnotation (const noRegion') . transform' upgradeDefinition importInfo . mapAnnotation (\(_ :: Region.Region) -> ())) s'
+            in
+            s''
 
         expressionFromTopLevelStructure structure =
             case structure of

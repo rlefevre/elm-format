@@ -132,3 +132,8 @@ instance MapType (Type' ns) (Type' ns) (Type' ns) (Type' ns) where
             TupleType ts -> TupleType (mapType f ts)
             RecordType base fields cs ml -> RecordType base (mapType f fields) cs ml
             FunctionType first rest ml -> FunctionType (mapType f first) (mapType f rest) ml
+
+
+
+class MapExpression e1 e2 a1 a2 where
+    mapExpression :: (e1 -> e2) -> a1 -> a2

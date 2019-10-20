@@ -67,6 +67,17 @@ instance MapType (Type' ns) (Type' ns) (Declaration ns expr) (Declaration ns exp
         Fixity a pre n post op -> Fixity a pre n post op
         Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn
 
+instance MapExpression a b (Declaration ns a) (Declaration ns b) where
+    mapExpression f = \case
+        Definition first rest comments e -> Definition first rest comments (f e)
+        TypeAnnotation name typ -> TypeAnnotation name typ
+        Datatype nameWithArgs tags -> Datatype nameWithArgs tags
+        TypeAlias comments name typ -> TypeAlias comments name typ
+        PortAnnotation name comments typ -> PortAnnotation name comments typ
+        PortDefinition name comments expr -> PortDefinition name comments (f expr)
+        Fixity a pre n post op -> Fixity a pre n post op
+        Fixity_0_19 a n op fn -> Fixity_0_19 a n op fn
+
 
 -- INFIX STUFF
 
@@ -93,3 +104,8 @@ data TopLevelStructure a
 
 instance MapType a b t1 t2 => MapType a b (TopLevelStructure t1) (TopLevelStructure t2) where
     mapType = fmap . mapType
+    {-# INLINE mapType #-}
+
+instance MapExpression a b t1 t2 => MapExpression a b (TopLevelStructure t1) (TopLevelStructure t2) where
+    mapExpression = fmap . mapExpression
+    {-# INLINE mapExpression #-}
