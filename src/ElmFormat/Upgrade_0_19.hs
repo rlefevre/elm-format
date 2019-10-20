@@ -158,11 +158,12 @@ splitOn c s =
                     break ((==) c) s'
 
 
-transform :: ImportInfo -> Fix (Expression [UppercaseIdentifier]) -> Fix (Expression [UppercaseIdentifier])
+transform :: ImportInfo -> Fix (AnnotatedExpression [UppercaseIdentifier] ()) -> Fix (AnnotatedExpression [UppercaseIdentifier] ())
 transform importInfo =
     case parseUpgradeDefinition elm0_19upgrade of
         Right replacements ->
             mapReferences' (applyReferences importInfo)
+                . mapAnnotation (const ())
                 . transform' replacements importInfo
                 . mapReferences' (matchReferences importInfo)
 
@@ -186,7 +187,7 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
             mapType (transformType upgradeDefinition) $
             case structure of
                 Entry (A region (Definition name args comments expr)) ->
-                    Entry (A region (Definition name args comments $ addAnnotation noRegion' $ transform' upgradeDefinition importInfo $ stripAnnotation expr))
+                    Entry (A region (Definition name args comments $ mapAnnotation (const noRegion') $ transform' upgradeDefinition importInfo $ mapAnnotation (const ()) expr))
 
                 _ -> structure
 
@@ -359,9 +360,9 @@ type UExpr = Fix (AnnotatedExpression (MatchedNamespace [UppercaseIdentifier]) S
 transform' ::
     UpgradeDefinition
     -> ImportInfo
-    -> Fix (Expression (MatchedNamespace [UppercaseIdentifier])) -> Fix (Expression (MatchedNamespace [UppercaseIdentifier]))
+    -> Fix (AnnotatedExpression (MatchedNamespace [UppercaseIdentifier]) ()) -> Fix (AnnotatedExpression (MatchedNamespace [UppercaseIdentifier]) Source)
 transform' upgradeDefinition importInfo =
-    stripAnnotation . bottomUp (simplify . applyUpgrades upgradeDefinition importInfo) . addAnnotation FromSource
+    bottomUp (simplify . applyUpgrades upgradeDefinition importInfo) . mapAnnotation (const FromSource)
 
 
 transformType ::

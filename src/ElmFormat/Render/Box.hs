@@ -1267,7 +1267,7 @@ expressionParens inner outer =
 formatExpression :: ElmVersion -> ImportInfo -> ExpressionContext -> Fix (Expression [UppercaseIdentifier]) -> Box
 formatExpression elmVersion importInfo context aexpr =
     case elmVersion of
-        Elm_0_19_Upgrade -> formatExpression' elmVersion importInfo context (Upgrade_0_19.transform importInfo aexpr)
+        Elm_0_19_Upgrade -> formatExpression' elmVersion importInfo context (AST.Expression.stripAnnotation $ Upgrade_0_19.transform importInfo $ AST.Expression.addAnnotation () $ aexpr)
         _ -> formatExpression' elmVersion importInfo context aexpr
 
 
