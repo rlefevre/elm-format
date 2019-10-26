@@ -29,35 +29,29 @@ data SymbolIdentifier =
 
 
 data Comment
-    = BlockComment [String]
+    = BlockComment (List String)
     | LineComment String
     | CommentTrickOpener
     | CommentTrickCloser
     | CommentTrickBlock String
     deriving (Eq, Ord, Show)
+type Comments = List Comment
 
 
-type Comments = [Comment]
+data Commented c a =
+    C c a
+    deriving (Eq, Ord, Functor, Show) -- TODO: is Ord needed?
 
+type C1 l1 a = Commented Comments a
+type C2 l1 l2 a = Commented (Comments, Comments) a
+type C3 l1 l2 l3 a = Commented (Comments, Comments, Comments) a
 
-data Commented a =
-    Commented Comments a Comments
-    deriving (Eq, Ord, Show, Functor)
+type C0Eol a = Commented (Maybe String) a
+type C1Eol l1 a = Commented (Comments, Maybe String) a
+type C2Eol l1 l2 a = Commented (Comments, Comments, Maybe String) a
 
-
-data KeywordCommented a =
-  KeywordCommented Comments Comments a
-  deriving (Eq, Show)
-
-
-type PreCommented a = (Comments, a)
-
-
-type PostCommented a = (a, Comments)
-
-
-data WithEol a = WithEol a (Maybe String)
-    deriving (Eq, Show, Functor)
+dropComments :: Commented c a -> a
+dropComments (C _ a) = a
 
 
 {-| This represents a list of things separated by comments.
@@ -66,8 +60,9 @@ Currently, the first item will never have leading comments.
 However, if Elm ever changes to allow optional leading delimiters, then
 comments before the first delimiter will go there.
 -}
+data BeforeSeparator; data AfterSeparator
 type Sequence a =
-    List ( Comments, PreCommented (WithEol a) )
+    List (C2Eol BeforeSeparator AfterSeparator a)
 
 
 {-| This represents a list of things between clear start and end delimiters.
@@ -79,9 +74,10 @@ For example:
 
 TODO: this should be replaced with (Sequence a, Comments)
 -}
+data Inside
 data ContainedCommentedList a
-    = Empty Comments
-    | Items [Commented a]
+    = Empty (C1 Inside ())
+    | Items [C2 Before After a]
 
 
 {-| This represents a list of things that have no clear start and end
@@ -96,9 +92,10 @@ If there is only one item in the list, an end-of-line comment can appear after t
 
 TODO: this should be replaced with (Sequence a)
 -}
+data AfterFirstTerm; data BeforeLastTerm; data BeforeTerm; data AfterTerm
 data ExposedCommentedList a
-    = Single (WithEol a)
-    | Multiple (PostCommented (WithEol a)) [Commented (WithEol a)] (PreCommented (WithEol a))
+    = Single (C0Eol a)
+    | Multiple (C1Eol AfterFirstTerm a) [C2Eol BeforeTerm AfterTerm a] (C1Eol BeforeLastTerm a)
 
 
 {-| This represents a list of things that have a clear start delimiter but no
@@ -114,18 +111,18 @@ For example:
 TODO: this should be replaced with (Sequence a)
 -}
 data OpenCommentedList a
-    = OpenCommentedList [Commented (WithEol a)] (PreCommented (WithEol a))
+    = OpenCommentedList [C2Eol BeforeTerm AfterTerm a] (C1Eol BeforeLastTerm a)
     deriving (Eq, Show, Functor)
 
 
 exposedToOpen :: Comments -> ExposedCommentedList a -> OpenCommentedList a
 exposedToOpen pre exposed =
     case exposed of
-        Single item ->
-            OpenCommentedList [] (pre, item)
+        Single (C eol item) ->
+            OpenCommentedList [] (C (pre, eol) item)
 
-        Multiple (first', postFirst) rest' lst ->
-            OpenCommentedList (Commented pre first' postFirst : rest') lst
+        Multiple (C (postFirst, eol) first') rest' lst ->
+            OpenCommentedList (C (pre, postFirst, eol) first' : rest') lst
 
 
 {-| Represents a delimiter-separated pair.
@@ -137,10 +134,11 @@ For example:
   key = value
   key : value
 -}
+data AfterKey; data BeforeValue
 data Pair key value =
     Pair
-        { _key :: PostCommented key
-        , _value :: PreCommented value
+        { _key :: C1 AfterKey key
+        , _value :: C1 BeforeValue value
         , forceMultiline :: ForceMultiline
         }
     deriving (Show, Eq, Functor)
@@ -189,21 +187,21 @@ data TypeConstructor ns
     | TupleConstructor Int -- will be 2 or greater, indicating the number of elements in the tuple
     deriving (Eq, Show, Functor)
 
-
+data Before; data After
 data Type' ns
     = UnitType Comments
     | TypeVariable LowercaseIdentifier
-    | TypeConstruction (TypeConstructor ns) [PreCommented (Type ns)]
-    | TypeParens (Commented (Type ns))
-    | TupleType [Commented (WithEol (Type ns))]
+    | TypeConstruction (TypeConstructor ns) [C1 Before (Type ns)]
+    | TypeParens (C2 Before After (Type ns))
+    | TupleType [C2Eol Before After (Type ns)]
     | RecordType
-        { base :: Maybe (Commented LowercaseIdentifier)
+        { base :: Maybe (C2 Before After LowercaseIdentifier)
         , fields :: Sequence (Pair LowercaseIdentifier (Type ns))
         , trailingComments :: Comments
         , forceMultiline :: ForceMultiline
         }
     | FunctionType
-        { first :: WithEol (Type ns)
+        { first :: C0Eol (Type ns)
         , rest :: Sequence (Type ns)
         , forceMultiline :: ForceMultiline
         }

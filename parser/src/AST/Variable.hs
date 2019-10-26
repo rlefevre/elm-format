@@ -30,20 +30,22 @@ instance MapReferences a b (Ref a) (Ref b) where
 -- LISTINGS
 
 -- | A listing of values. Something like (a,b,c) or (..) or (a,b,..)
+data BeforeDots; data AfterDots
 data Listing a
     = ExplicitListing a Bool
-    | OpenListing (Commented ())
+    | OpenListing (C2 BeforeDots AfterDots ())
     | ClosedListing
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show) -- TODO: is Ord needed?
 
 
+data AfterValue
 type CommentedMap k v =
-    Map k (Commented v)
+    Map k (C2 BeforeValue AfterValue v)
 
 
 -- | A value that can be imported or exported
 data Value
     = Value !LowercaseIdentifier
     | OpValue SymbolIdentifier
-    | Union (PostCommented UppercaseIdentifier) (Listing (CommentedMap UppercaseIdentifier ()))
-    deriving (Eq, Ord, Show)
+    | Union (C1 After UppercaseIdentifier) (Listing (CommentedMap UppercaseIdentifier ()))
+    deriving (Eq, Ord, Show) -- TODO: is Ord needed?

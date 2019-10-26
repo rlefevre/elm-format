@@ -16,6 +16,7 @@ import Parse.IParser
 import Parse.Whitespace
 
 import AST.V0_16
+import AST.Expression
 import qualified AST.Expression as E
 import AST.Pattern (Pattern)
 import qualified AST.Pattern as P
@@ -64,12 +65,12 @@ listTerm elmVersion =
     range =
       do
           lo <- expr elmVersion
-          (loPost, _, hiPre) <- padded (string "..")
+          (C (loPost, hiPre) _) <- padded (string "..")
           hi <- expr elmVersion
           return $ \loPre hiPost multiline ->
               E.Range
-                  (Commented loPre lo loPost)
-                  (Commented hiPre hi hiPost)
+                  (C (loPre, loPost) lo)
+                  (C (hiPre, hiPost) hi)
                   multiline
 
     shader' =
@@ -102,7 +103,7 @@ parensTerm elmVersion =
           return $ E.TupleFunction (length commas + 1)
 
     parened =
-      do  expressions <- commaSep1 ((\e a b -> Commented a e b) <$> expr elmVersion)
+      do  expressions <- commaSep1 ((\e a b -> C (a, b) e) <$> expr elmVersion)
           return $ \pre post multiline ->
             case expressions pre post of
               [single] ->
@@ -196,8 +197,8 @@ ifExpr elmVersion =
   in
     do
       first <- ifClause elmVersion
-      rest <- many (try $ (,) <$> elseKeyword <*> ifClause elmVersion)
-      final <- (,) <$> elseKeyword <*> expr elmVersion
+      rest <- many (try $ C <$> elseKeyword <*> ifClause elmVersion)
+      final <- C <$> elseKeyword <*> expr elmVersion
 
       return $ E.If first rest final
 
@@ -208,12 +209,12 @@ ifClause elmVersion =
     try (reserved elmVersion "if")
     preCondition <- whitespace
     condition <- expr elmVersion
-    (postCondition, _, bodyComments) <- padded (reserved elmVersion "then")
+    (C (postCondition, bodyComments) _) <- padded (reserved elmVersion "then")
     thenBranch <- expr elmVersion
     preElse <- whitespace <?> "an 'else' branch"
     return $ E.IfClause
-      (Commented preCondition condition postCondition)
-      (Commented bodyComments thenBranch preElse)
+      (C (preCondition, postCondition) condition)
+      (C (bodyComments, preElse) thenBranch)
 
 
 lambdaExpr :: ElmVersion -> IParser E.Expr
@@ -222,7 +223,7 @@ lambdaExpr elmVersion =
     subparser = do
       _ <- char '\\' <|> char '\x03BB' <?> "an anonymous function"
       args <- spacePrefix (Pattern.term elmVersion)
-      (preArrowComments, _, bodyComments) <- padded rightArrow
+      (C (preArrowComments, bodyComments) _) <- padded rightArrow
       body <- expr elmVersion
       return (args, preArrowComments, bodyComments, body)
   in
@@ -234,7 +235,7 @@ lambdaExpr elmVersion =
 caseExpr :: ElmVersion -> IParser E.Expr'
 caseExpr elmVersion =
   do  try (reserved elmVersion "case")
-      (e, multilineSubject) <- trackNewline $ (\(pre, e, post) -> Commented pre e post) <$> padded (expr elmVersion)
+      (e, multilineSubject) <- trackNewline $ padded (expr elmVersion)
       reserved elmVersion "of"
       firstPatternComments <- whitespace
       result <- cases firstPatternComments
@@ -242,17 +243,20 @@ caseExpr elmVersion =
   where
     case_ preComments =
       do
-          (patternComments, p, (preArrowComments, _, bodyComments)) <-
+          (patternComments, p, C (preArrowComments, bodyComments) _) <-
               try ((,,)
                   <$> whitespace
                   <*> (checkIndent >> Pattern.expr elmVersion)
                   <*> padded rightArrow
                   )
           result <- expr elmVersion
-          return
-            ( Commented (preComments ++ patternComments) p preArrowComments
-            , (bodyComments, result)
-            )
+          return $ CaseBranch
+              { beforePattern = preComments ++ patternComments
+              , beforeArrow = preArrowComments
+              , afterArrow = bodyComments
+              , pattern = p
+              , body = result
+              }
 
     cases preComments =
         withPos $
@@ -272,7 +276,7 @@ letExpr elmVersion =
       commentsAfterLet <- map E.LetComment <$> whitespace
       defs <-
         block $
-          do  def <- typeAnnotation elmVersion E.LetAnnotation <|> definition elmVersion E.LetDefinition
+          do  def <- typeAnnotation elmVersion LetAnnotation <|> definition elmVersion LetDefinition
               commentsAfterDef <- whitespace
               return $ def : (map E.LetComment commentsAfterDef)
       _ <- reserved elmVersion "in"
@@ -283,29 +287,29 @@ letExpr elmVersion =
 
 -- TYPE ANNOTATION
 
-typeAnnotation :: ElmVersion -> ((Var.Ref (), Comments) -> (Comments, Type [UppercaseIdentifier]) -> a) -> IParser a
+typeAnnotation :: ElmVersion -> (C1 after (Var.Ref ()) -> C1 before (Type [UppercaseIdentifier]) -> a) -> IParser a
 typeAnnotation elmVersion fn =
-    (\(v, pre, post) e -> fn (v, pre) (post, e)) <$> try start <*> Type.expr elmVersion
+    (\(v, pre, post) e -> fn (C pre v) (C post e)) <$> try start <*> Type.expr elmVersion
   where
     start =
       do  v <- (Var.VarRef () <$> lowVar elmVersion) <|> (Var.OpRef <$> symOpInParens)
-          (preColon, _, postColon) <- padded hasType
+          (C (preColon, postColon) _) <- padded hasType
           return (v, preColon, postColon)
 
 
 -- DEFINITION
 
-definition :: ElmVersion -> (Pattern [UppercaseIdentifier] -> [(Comments, Pattern [UppercaseIdentifier])] -> Comments -> E.Expr -> a) -> IParser a
+definition :: ElmVersion -> (Pattern [UppercaseIdentifier] -> [C1 before (Pattern [UppercaseIdentifier])] -> Comments -> E.Expr -> a) -> IParser a
 definition elmVersion fn =
   withPos $
     do
         (name, args) <- defStart elmVersion
-        (preEqualsComments, _, postEqualsComments) <- padded equals
+        (C (preEqualsComments, postEqualsComments) _) <- padded equals
         body <- expr elmVersion
         return $ fn name args (preEqualsComments ++ postEqualsComments) body
 
 
-defStart :: ElmVersion -> IParser (Pattern [UppercaseIdentifier], [(Comments, Pattern [UppercaseIdentifier])])
+defStart :: ElmVersion -> IParser (Pattern [UppercaseIdentifier], [C1 before (Pattern [UppercaseIdentifier])])
 defStart elmVersion =
     choice
       [ do  pattern <- try $ Pattern.term elmVersion

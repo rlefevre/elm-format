@@ -198,20 +198,20 @@ spaceySepBy1 sep parser =
         -- step :: PostCommented (WithEol a) -> [Commented (WithEol a)] -> Comments -> IParser (ExposedCommentedList a)
         step first rest post =
             do
-                next <- withEol parser
+                (C eol next) <- withEol parser
                 choice
                     [ try (padded sep)
-                        >>= (\(preSep, _, postSep) -> step first (Commented post next preSep : rest) postSep)
-                    , return $ Multiple first (reverse rest) (post, next)
+                        >>= (\(C (preSep, postSep) _) -> step first (C (post, preSep, eol) next : rest) postSep)
+                    , return $ Multiple first (reverse rest) (C (post, eol) next)
                     ]
 
     in
         do
-            value <- withEol parser
+            (C eol value) <- withEol parser
             choice
                 [ try (padded sep)
-                    >>= (\(preSep, _, postSep) -> step (value, preSep) [] postSep)
-                , return $ Single value
+                    >>= (\(C (preSep, postSep) _) -> step (C (preSep, eol) value) [] postSep)
+                , return $ Single (C eol value)
                 ]
 
 
@@ -225,22 +225,22 @@ spaceySepBy1'' sep parser =
     do
         result <- spaceySepBy1 sep parser
         case result of
-            Single (WithEol item eol) ->
+            Single (C eol item) ->
                 return $ \pre post -> [item pre (combine eol post)]
 
-            Multiple (WithEol first firstEol, postFirst) rest (preLast, WithEol last eol) ->
+            Multiple (C (postFirst, firstEol) first ) rest (C (preLast, eol) last) ->
                 return $ \preFirst postLast ->
                     concat
                         [ [first preFirst $ combine firstEol postFirst]
-                        , fmap (\(Commented pre (WithEol item eol) post) -> item pre $ combine eol post) rest
+                        , fmap (\(C (pre, post, eol) item) -> item pre $ combine eol post) rest
                         , [last preLast $ combine eol postLast ]
                         ]
 
 
 -- DEPRECATED: use spaceySepBy1 instead
-spaceySepBy1' :: IParser sep -> IParser a -> IParser (Comments -> Comments -> [Commented a])
+spaceySepBy1' :: IParser sep -> IParser a -> IParser (Comments -> Comments -> [C2 before after a])
 spaceySepBy1' sep parser =
-    spaceySepBy1'' sep ((\x pre post -> Commented pre x post) <$> parser)
+    spaceySepBy1'' sep ((\x pre post -> C (pre, post) x) <$> parser)
 
 
 commaSep1 :: IParser (Comments -> Comments -> a) -> IParser (Comments -> Comments -> [a])
@@ -248,21 +248,21 @@ commaSep1 =
   spaceySepBy1'' comma
 
 
-commaSep1' :: IParser a -> IParser (Comments -> Comments -> [Commented a])
+commaSep1' :: IParser a -> IParser (Comments -> Comments -> [C2 before after a])
 commaSep1' =
   spaceySepBy1' comma
 
 
-toSet :: Ord k => (v -> v -> v) -> [Commented (k, v)] -> Map k (Commented v)
+toSet :: Ord k => (v -> v -> v) -> [C2 before after (k, v)] -> Map k (C2 before after v)
 toSet merge values =
     let
-        merge' (Commented pre1 a post1) (Commented pre2 b post2) =
-            Commented (pre1 ++ pre2) (merge a b) (post1 ++ post2)
+        merge' (C (pre1, post1) a) (C (pre2, post2) b) =
+            C (pre1 ++ pre2, post1 ++ post2) (merge a b)
     in
-    foldl (\m (Commented pre (k, v) post) -> insertWith merge' k (Commented pre v post) m) empty values
+    foldl (\m (C (pre, post) (k, v)) -> insertWith merge' k (C (pre, post) v) m) empty values
 
 
-commaSep1Set' :: Ord k => IParser (k, v) -> (v -> v -> v) -> IParser (Comments -> Comments -> Map k (Commented v))
+commaSep1Set' :: Ord k => IParser (k, v) -> (v -> v -> v) -> IParser (Comments -> Comments -> Map k (C2 before after v))
 commaSep1Set' parser merge =
     do
         values <- commaSep1' parser
@@ -279,7 +279,7 @@ pipeSep1 =
   spaceySepBy1 verticalBar
 
 
-keyValue :: IParser sep -> IParser key -> IParser val -> IParser (Comments -> Comments -> (Commented key, Commented val) )
+keyValue :: IParser sep -> IParser key -> IParser val -> IParser (Comments -> Comments -> (C2 before after key, C2 before' after' val) )
 keyValue parseSep parseKey parseVal =
   do
     key <- parseKey
@@ -287,12 +287,12 @@ keyValue parseSep parseKey parseVal =
     postSep <- whitespace
     val <- parseVal
     return $ \pre post ->
-      ( Commented pre key preSep
-      , Commented postSep val post
+      ( C (pre, preSep) key
+      , C (postSep, post) val
       )
 
 
-separated :: IParser sep -> IParser e -> IParser (Either e (R.Region, (WithEol e), Sequence e, Bool))
+separated :: IParser sep -> IParser e -> IParser (Either e (R.Region, C0Eol e, Sequence e, Bool))
 separated sep expr' =
   let
     subparser =
@@ -307,11 +307,11 @@ separated sep expr' =
                     t2 <- separated sep expr'
                     end <- getMyPosition
                     case t2 of
-                        Right (_, WithEol t2' eolT2, ts, _) ->
+                        Right (_, C eolT2 t2', ts, _) ->
                           return $ \multiline -> Right
                             ( R.Region start end
-                            , WithEol t1 eolT1
-                            , (preArrow, (postArrow, WithEol t2' eolT2)):ts
+                            , C eolT1 t1
+                            , C (preArrow, postArrow, eolT2) t2' : ts
                             , multiline
                             )
                         Left t2' ->
@@ -319,8 +319,8 @@ separated sep expr' =
                             eol <- restOfLine
                             return $ \multiline -> Right
                               ( R.Region start end
-                              , WithEol t1 eolT1
-                              , [(preArrow, (postArrow, WithEol t2' eol))]
+                              , C eolT1 t1
+                              , [ C (preArrow, postArrow, eol) t2' ]
                               , multiline)
   in
     (\(f, multiline) -> f $ multilineToBool multiline) <$> trackNewline subparser
@@ -331,28 +331,26 @@ dotSep1 p =
   (:) <$> p <*> many (try (char '.') >> p)
 
 
-spacePrefix :: IParser a -> IParser [(Comments, a)]
+spacePrefix :: IParser a -> IParser [C1 before a]
 spacePrefix p =
   fmap fst <$>
       constrainedSpacePrefix' p (\_ -> return ())
 
 
-constrainedSpacePrefix :: IParser a -> IParser [((Comments, a), Multiline)]
+constrainedSpacePrefix :: IParser a -> IParser [(C1 before a, Multiline)]
 constrainedSpacePrefix parser =
   constrainedSpacePrefix' parser constraint
   where
     constraint empty = if empty then notFollowedBy (char '-') else return ()
 
 
-constrainedSpacePrefix' :: IParser a -> (Bool -> IParser b) -> IParser [((Comments, a), Multiline)]
+constrainedSpacePrefix' :: IParser a -> (Bool -> IParser b) -> IParser [(C1 before a, Multiline)]
 constrainedSpacePrefix' parser constraint =
     many $ trackNewline $ choice
-      [ comment <$> try (const <$> spacing <*> lookAhead (oneOf "[({")) <*> parser
-      , try (comment <$> spacing <*> parser)
+      [ C <$> try (const <$> spacing <*> lookAhead (oneOf "[({")) <*> parser
+      , try (C <$> spacing <*> parser)
       ]
     where
-      comment pre value = (pre, value)
-
       spacing = do
         (n, comments) <- whitespace'
         _ <- constraint (not n) <?> Syntax.whitespace
@@ -376,7 +374,7 @@ surround a z name p =
     -- subparser :: IParser (Bool -> a)
     subparser = do
       _ <- char a
-      (pre, v, post) <- padded p
+      (C (pre, post) v) <- padded p
       _ <- char z <?> unwords ["a closing", name, show z]
       return $ \multiline -> v pre post multiline
     in
@@ -429,25 +427,25 @@ parens' =
   surround' '(' ')' "paren"
 
 
-parens'' :: IParser a -> IParser (Either Comments [Commented a])
+parens'' :: IParser a -> IParser (Either Comments [C2 before after a])
 parens'' = surround'' '(' ')'
 
 
-braces'' :: IParser a -> IParser (Either Comments [Commented a])
+braces'' :: IParser a -> IParser (Either Comments [C2 before after a])
 braces'' = surround'' '[' ']'
 
 
-surround'' :: Char -> Char -> IParser a -> IParser (Either Comments [Commented a])
+surround'' :: Char -> Char -> IParser a -> IParser (Either Comments [C2 before after a])
 surround'' leftDelim rightDelim inner =
   let
     sep''' =
       do
-        v <- Commented <$> whitespace <*> inner <*> whitespace
+        v <- (\pre a post -> C (pre, post) a) <$> whitespace <*> inner <*> whitespace
         option [v] ((\x -> v : x) <$> (char ',' >> sep'''))
     sep'' =
       do
           pre <- whitespace
-          v <- optionMaybe (Commented pre <$> inner <*> whitespace)
+          v <- optionMaybe ((\a post -> C (pre, post) a) <$> inner <*> whitespace)
           case v of
               Nothing ->
                   return $ Left pre
@@ -513,13 +511,13 @@ dot =
       notFollowedBy (char '.')
 
 
-commentedKeyword :: ElmVersion -> String -> IParser a -> IParser (KeywordCommented a)
+commentedKeyword :: ElmVersion -> String -> IParser a -> IParser (C2 beforeKeyword afterKeyword a)
 commentedKeyword elmVersion word parser =
   do
     pre <- try (whitespace <* reserved elmVersion word)
     post <- whitespace
     value <- parser
-    return $ KeywordCommented pre post value
+    return $ C (pre, post) value
 
 
 -- ODD COMBINATORS

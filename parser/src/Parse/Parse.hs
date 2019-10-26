@@ -30,7 +30,7 @@ parseDeclarations elmVersion src =
     parse src (Parse.Module.topLevel (Parse.Declaration.declaration elmVersion) <* eof)
 
 
-parseExpressions :: ElmVersion -> String -> Result.Result () Error.Error [TopLevelStructure (WithEol Expr)]
+parseExpressions :: ElmVersion -> String -> Result.Result () Error.Error [TopLevelStructure (C0Eol Expr)]
 parseExpressions elmVersion src =
     parse src (Parse.Module.topLevel (withEol $ Parse.Expression.expr elmVersion) <* eof)
 

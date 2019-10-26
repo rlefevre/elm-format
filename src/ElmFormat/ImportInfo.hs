@@ -26,7 +26,7 @@ fromModule ::
     -> AST.Module.Module
     -> ImportInfo
 fromModule knownModuleContents modu =
-    fromImports knownModuleContents (fmap snd $ snd $ AST.Module.imports modu)
+    fromImports knownModuleContents (fmap dropComments $ dropComments $ AST.Module.imports modu)
 
 
 fromImports ::
@@ -42,7 +42,7 @@ fromImports knownModuleContents imports =
             case (\(UppercaseIdentifier x) -> x) <$> moduleName of
                 ["Html", "Attributes"] ->
                     AST.Module.DetailedListing
-                        (Dict.fromList $ fmap (\x -> (LowercaseIdentifier x, Commented [] () [])) $
+                        (Dict.fromList $ fmap (\x -> (LowercaseIdentifier x, C ([], []) ())) $
                             [ "style"
                             ]
                         )
@@ -50,7 +50,7 @@ fromImports knownModuleContents imports =
                         mempty
                 _ -> knownModuleContents moduleName
 
-        getExposedValues moduleName (AST.Module.ImportMethod _ (_, (_, listing))) =
+        getExposedValues moduleName (AST.Module.ImportMethod _ (C _ listing)) =
             Dict.fromList $ fmap (flip (,) moduleName) $
             case listing of
                 ClosedListing -> []
@@ -61,7 +61,7 @@ fromImports knownModuleContents imports =
             -- TODO: mark ambiguous names if multiple modules expose them
             Dict.foldlWithKey (\a k v -> Dict.union a $ getExposedValues k v) mempty imports
 
-        getExposedTypes moduleName (AST.Module.ImportMethod _ (_, (_, listing))) =
+        getExposedTypes moduleName (AST.Module.ImportMethod _ (C _ listing)) =
             Dict.fromList $ fmap (flip (,) moduleName) $
                 case listing of
                     ClosedListing -> []
@@ -76,7 +76,7 @@ fromImports knownModuleContents imports =
             let
                 getAlias importMethod =
                     case AST.Module.alias importMethod of
-                        Just (_, (_, alias)) ->
+                        Just (C _ alias) ->
                             Just alias
 
                         Nothing -> Nothing

@@ -19,17 +19,17 @@ data Pattern' ns
     | Literal Literal
     | VarPattern LowercaseIdentifier
     | OpPattern SymbolIdentifier
-    | Data (ns, UppercaseIdentifier) [(Comments, Pattern ns)]
-    | PatternParens (Commented (Pattern ns))
-    | Tuple [Commented (Pattern ns)]
+    | Data (ns, UppercaseIdentifier) [C1 BeforeTerm (Pattern ns)]
+    | PatternParens (C2 Before After (Pattern ns))
+    | Tuple [C2 BeforeTerm AfterTerm (Pattern ns)]
     | EmptyListPattern Comments
-    | List [Commented (Pattern ns)]
+    | List [C2 BeforeTerm AfterTerm (Pattern ns)]
     | ConsPattern
-        { first :: WithEol (Pattern ns)
+        { first :: C0Eol (Pattern ns)
         , rest :: Sequence (Pattern ns)
         }
     | EmptyRecordPattern Comments
-    | Record [Commented LowercaseIdentifier]
+    | Record [C2 BeforeTerm AfterTerm LowercaseIdentifier]
     | Alias (Pattern ns, Comments) (Comments, LowercaseIdentifier)
     deriving (Eq, Show, Functor)
 

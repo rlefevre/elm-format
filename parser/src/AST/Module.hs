@@ -3,6 +3,7 @@ module AST.Module
     , UserImport, ImportMethod(..)
     , DetailedListing(..)
     , defaultHeader
+    , BeforeExposing, AfterExposing, BeforeAs, AfterAs
     ) where
 
 import AST.Declaration (TopLevelStructure, Declaration)
@@ -17,11 +18,12 @@ import AST.V0_16
 -- MODULES
 
 
+data BeforeImports
 data Module = Module
     { initialComments :: Comments
     , header :: Maybe Header
     , docs :: A.Located (Maybe Markdown.Blocks)
-    , imports :: PreCommented (Map [UppercaseIdentifier] (Comments, ImportMethod))
+    , imports :: C1 BeforeImports (Map [UppercaseIdentifier] (C1 Before ImportMethod))
     , body :: [TopLevelStructure (Declaration [UppercaseIdentifier] Expr)]
     }
     deriving (Eq, Show)
@@ -37,11 +39,12 @@ data SourceTag
 
 
 {-| Basic info needed to identify modules and determine dependencies. -}
+data BeforeWhere; data AfterWhere
 data Header = Header
     { srcTag :: SourceTag
-    , name :: Commented [UppercaseIdentifier]
-    , moduleSettings :: Maybe (KeywordCommented SourceSettings)
-    , exports :: Maybe (KeywordCommented (Var.Listing DetailedListing))
+    , name :: C2 Before After [UppercaseIdentifier]
+    , moduleSettings :: Maybe (C2 BeforeWhere AfterWhere SourceSettings)
+    , exports :: Maybe (C2 BeforeExposing AfterExposing (Var.Listing DetailedListing))
     }
     deriving (Eq, Show)
 
@@ -50,15 +53,16 @@ defaultHeader :: Header
 defaultHeader =
     Header
         Normal
-        (Commented [] [UppercaseIdentifier "Main"] [])
+        (C ([], []) [UppercaseIdentifier "Main"])
         Nothing
         Nothing
 
 
+data BeforeListing
 data DetailedListing = DetailedListing
     { values :: Var.CommentedMap LowercaseIdentifier ()
     , operators :: Var.CommentedMap SymbolIdentifier ()
-    , types :: Var.CommentedMap UppercaseIdentifier (Comments, Var.Listing (Var.CommentedMap UppercaseIdentifier ()))
+    , types :: Var.CommentedMap UppercaseIdentifier (C1 BeforeListing (Var.Listing (Var.CommentedMap UppercaseIdentifier ())))
     }
     deriving (Eq, Show)
 
@@ -70,16 +74,17 @@ instance Monoid DetailedListing where
 
 
 type SourceSettings =
-  [(Commented LowercaseIdentifier, Commented UppercaseIdentifier)]
+  [(C2 Before After LowercaseIdentifier, C2 Before After UppercaseIdentifier)]
 
 -- IMPORTs
 
 type UserImport
-    = (PreCommented [UppercaseIdentifier], ImportMethod)
+    = (C1 Before [UppercaseIdentifier], ImportMethod)
 
 
+data BeforeAs; data AfterAs; data BeforeExposing; data AfterExposing
 data ImportMethod = ImportMethod
-    { alias :: Maybe (Comments, PreCommented UppercaseIdentifier)
-    , exposedVars :: (Comments, PreCommented (Var.Listing DetailedListing))
+    { alias :: Maybe (C2 BeforeAs AfterAs UppercaseIdentifier)
+    , exposedVars :: C2 BeforeExposing AfterExposing (Var.Listing DetailedListing)
     }
     deriving (Eq, Show)

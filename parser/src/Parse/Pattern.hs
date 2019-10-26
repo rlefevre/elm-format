@@ -81,7 +81,7 @@ tuple elmVersion =
           Right [] ->
             A.at start end $ P.UnitPattern []
 
-          Right [Commented [] pattern []] ->
+          Right [C ([], []) pattern] ->
             pattern
 
           Right [pattern] ->

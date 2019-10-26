@@ -28,12 +28,12 @@ sectionedGroup term =
         step leading terms =
             do
                 pre <- whitespace
-                first <- withEol term
+                (C eol first) <- withEol term
                 preSep <- whitespace
                 hasMore <- choice [ comma *> return True, return False ]
                 if hasMore
-                    then step preSep ((leading, (pre, first)) : terms)
-                    else return (reverse $ (leading, (pre, first)) : terms, preSep)
+                    then step preSep (C (leading, pre, eol) first : terms)
+                    else return (reverse (C (leading, pre, eol) first : terms), preSep)
     in
         choice
             [ try $ step [] []

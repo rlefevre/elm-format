@@ -26,8 +26,8 @@ data UnaryOperator =
 
 
 data LetDeclaration ns e
-  = LetDefinition (Pattern ns) [PreCommented (Pattern ns)] Comments e
-  | LetAnnotation (PostCommented (Var.Ref ())) (PreCommented (Type ns))
+  = LetDefinition (Pattern ns) [C1 Before (Pattern ns)] Comments e
+  | LetAnnotation (C1 After (Var.Ref ())) (C1 Before (Type ns))
   | LetComment Comment
   deriving (Eq, Show, Functor)
 
@@ -48,8 +48,9 @@ instance MapReferences a b (LetDeclaration a e) (LetDeclaration b e) where
 type Expr =
     Fix (AnnotatedExpression [UppercaseIdentifier] R.Region)
 
+data BeforePredicate; data AfterPredicate; data BeforeBody; data AfterBody
 data IfClause e =
-    IfClause (Commented e) (Commented e)
+    IfClause (C2 BeforePredicate AfterPredicate e) (C2 BeforeBody AfterBody e)
     deriving (Eq, Show, Functor)
 
 
@@ -64,6 +65,23 @@ instance MapNamespace a b (BinopsClause a e) (BinopsClause b e) where
 instance MapReferences a b (BinopsClause a e) (BinopsClause b e) where
     mapReferences fu fl (BinopsClause pre op post e) =
         BinopsClause pre (mapReferences fu fl op) post e
+
+
+data CaseBranch ns e =
+    CaseBranch
+        { beforePattern :: Comments
+        , beforeArrow :: Comments
+        , afterArrow :: Comments
+        , pattern :: Pattern ns
+        , body :: e
+        }
+    deriving (Eq, Functor, Show)
+
+instance MapNamespace a b (CaseBranch a e) (CaseBranch b e) where
+    mapNamespace f (CaseBranch c1 c2 c3 p e) = CaseBranch c1 c2 c3 (mapNamespace f p) e
+
+instance MapReferences a b (CaseBranch a e) (CaseBranch b e) where
+    mapReferences fu fl (CaseBranch c1 c2 c3 p e) = CaseBranch c1 c2 c3 (mapReferences fu fl p) e
 
 
 type Expr' =
@@ -111,28 +129,29 @@ instance MapReferences a b (Fix (Expression a)) (Fix (Expression b)) where
     mapReferences fu fl = cata (Fix . mapReferences fu fl)
 
 
+data BeforePattern; data BeforeArrow; data AfterArrow
 data Expression ns e
     = Unit Comments
     | Literal Literal
     | VarExpr (Var.Ref ns)
 
-    | App e [PreCommented e] FunctionApplicationMultiline
+    | App e [C1 Before e] FunctionApplicationMultiline
     | Unary UnaryOperator e
     | Binops e [BinopsClause ns e] Bool
-    | Parens (Commented e)
+    | Parens (C2 Before After e)
 
     | ExplicitList
         { terms :: Sequence e
         , trailingComments :: Comments
         , forceMultiline :: ForceMultiline
         }
-    | Range (Commented e) (Commented e) Bool
+    | Range (C2 Before After e) (C2 Before After e) Bool
 
-    | Tuple [Commented e] Bool
+    | Tuple [C2 Before After e] Bool
     | TupleFunction Int -- will be 2 or greater, indicating the number of elements in the tuple
 
     | Record
-        { base :: Maybe (Commented LowercaseIdentifier)
+        { base :: Maybe (C2 Before After LowercaseIdentifier)
         , fields :: Sequence (Pair LowercaseIdentifier e)
         , trailingComments :: Comments
         , forceMultiline :: ForceMultiline
@@ -140,10 +159,10 @@ data Expression ns e
     | Access e LowercaseIdentifier
     | AccessFunction LowercaseIdentifier
 
-    | Lambda [PreCommented (Pattern ns)] Comments e Bool
-    | If (IfClause e) [PreCommented (IfClause e)] (PreCommented e)
+    | Lambda [C1 Before (Pattern ns)] Comments e Bool
+    | If (IfClause e) [C1 Before (IfClause e)] (C1 Before e)
     | Let [LetDeclaration ns e] Comments e
-    | Case (Commented e, Bool) [(Commented (Pattern ns), (PreCommented e))]
+    | Case (C2 Before After e, Bool) [CaseBranch ns e]
 
     -- for type checking and code gen only
     | GLShader String
@@ -171,10 +190,8 @@ instance MapNamespace a b (Expression a e) (Expression b e) where
             AccessFunction n -> AccessFunction n
             Lambda params pre body multi -> Lambda (mapNamespace f params) pre body multi
             If c1 elseIfs els -> If c1 elseIfs els
-            Case (cond, m) branches -> Case (cond, m) (fmap (mapFst $ mapNamespace f) branches)
+            Case (cond, m) branches -> Case (cond, m) (fmap (mapNamespace f) branches)
             GLShader s -> GLShader s
-        where
-            mapFst f (a, x) = (f a, x)
 
 
 instance MapReferences a b (Expression a e) (Expression b e) where
@@ -198,10 +215,8 @@ instance MapReferences a b (Expression a e) (Expression b e) where
             AccessFunction n -> AccessFunction n
             Lambda params pre body multi -> Lambda (mapReferences fu fl params) pre body multi
             If c1 elseIfs els -> If c1 elseIfs els
-            Case (cond, m) branches -> Case (cond, m) (fmap (mapFst $ mapReferences fu fl) branches)
+            Case (cond, m) branches -> Case (cond, m) (fmap (mapReferences fu fl) branches)
             GLShader s -> GLShader s
-        where
-            mapFst f (a, x) = (f a, x)
 
 
 bottomUp :: Functor f => (Fix f -> Fix f) -> Fix f -> Fix f
@@ -215,14 +230,15 @@ countUsages :: Ord ns => Expression ns (UsageCount ns) -> UsageCount ns
 countUsages e' =
     let
         mergeUsage = Dict.unionsWith (Dict.unionWith (+))
-        _sequence = fmap (\(_, (_, WithEol t _)) -> t)
-        _pair (Pair (k, _) (_, v) _) = (k, v)
-        _c (Commented _ e _) = e
+        _sequence = fmap (\(C _ t) -> t)
+        _pair (Pair (C _ k) (C _ v) _) = (k, v)
+        _c (C _ e) = e
         _letDeclaration l =
             case l of
                 LetDefinition _ _ _ e -> Just e
                 _ -> Nothing
         countIfClause (IfClause a b) = mergeUsage [_c a, _c b]
+        countCaseBranch (CaseBranch _ _ _ p e) = e
     in
     case e' of
         Unit _ -> Dict.empty
@@ -230,7 +246,7 @@ countUsages e' =
         VarExpr (Var.VarRef ns (LowercaseIdentifier n)) -> Dict.singleton ns (Dict.singleton n 1)
         VarExpr (Var.TagRef ns (UppercaseIdentifier n)) -> Dict.singleton ns (Dict.singleton n 1)
         VarExpr (Var.OpRef _) -> Dict.empty
-        App e args _ -> mergeUsage (e : fmap snd args)
+        App e args _ -> mergeUsage (e : fmap dropComments args)
         Unary _ e -> e
         Binops e ops _ -> mergeUsage (e : fmap (\(BinopsClause _ _ _ t) -> t) ops)
         Parens e -> _c e
@@ -242,7 +258,7 @@ countUsages e' =
         Access e _ -> e
         AccessFunction _ -> Dict.empty
         Lambda _ _ e _ -> e
-        If a rest (_, e) -> mergeUsage (countIfClause a : e : fmap (countIfClause . snd) rest)
+        If a rest (C _ e) -> mergeUsage (countIfClause a : e : fmap (countIfClause . dropComments) rest)
         Let defs _ e -> mergeUsage (e : Maybe.mapMaybe _letDeclaration defs)
-        Case (e, _) branches -> mergeUsage (_c e : fmap (snd . snd) branches)
+        Case (e, _) branches -> mergeUsage (_c e : fmap countCaseBranch branches)
         GLShader _ -> Dict.empty

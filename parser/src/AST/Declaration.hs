@@ -15,22 +15,23 @@ import qualified Cheapskate.Types as Markdown
 -- DECLARATIONS
 
 type NameWithArgs name arg =
-    (name, [PreCommented arg])
+    (name, [C1 BeforeTerm arg])
 
+data AfterName; data BeforeType; data AfterEquals
 data Declaration ns expr
-    = Definition (Pattern ns) [PreCommented (Pattern ns)] Comments expr
-    | TypeAnnotation (PostCommented (Var.Ref ())) (PreCommented (Type ns))
+    = Definition (Pattern ns) [C1 BeforeTerm (Pattern ns)] Comments expr
+    | TypeAnnotation (C1 AfterName (Var.Ref ())) (C1 BeforeType (Type ns))
     | Datatype
-        { nameWithArgs :: Commented (NameWithArgs UppercaseIdentifier LowercaseIdentifier)
+        { nameWithArgs :: C2 Before After (NameWithArgs UppercaseIdentifier LowercaseIdentifier)
         , tags :: OpenCommentedList (NameWithArgs UppercaseIdentifier (Type ns))
         }
     | TypeAlias Comments
-        (Commented (NameWithArgs UppercaseIdentifier LowercaseIdentifier))
-        (PreCommented (Type ns))
-    | PortAnnotation (Commented LowercaseIdentifier) Comments (Type ns)
-    | PortDefinition (Commented LowercaseIdentifier) Comments expr
+        (C2 Before After (NameWithArgs UppercaseIdentifier LowercaseIdentifier))
+        (C1 AfterEquals (Type ns))
+    | PortAnnotation (C2 Before After LowercaseIdentifier) Comments (Type ns)
+    | PortDefinition (C2 Before After LowercaseIdentifier) Comments expr
     | Fixity Assoc Comments Int Comments (Var.Ref ns)
-    | Fixity_0_19 (PreCommented Assoc) (PreCommented Int) (Commented SymbolIdentifier) (PreCommented LowercaseIdentifier)
+    | Fixity_0_19 (C1 Before Assoc) (C1 Before Int) (C2 Before After SymbolIdentifier) (C1 Before LowercaseIdentifier)
     deriving (Eq, Show, Functor)
 
 
