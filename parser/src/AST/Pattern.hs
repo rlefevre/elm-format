@@ -19,18 +19,18 @@ data Pattern' ns
     | Literal Literal
     | VarPattern LowercaseIdentifier
     | OpPattern SymbolIdentifier
-    | Data (ns, UppercaseIdentifier) [(Comments, Pattern ns)]
-    | PatternParens (Commented (Pattern ns))
-    | Tuple [Commented (Pattern ns)]
+    | Data (ns, UppercaseIdentifier) [C1 BeforeTerm (Pattern ns)]
+    | PatternParens (C2 Before After (Pattern ns))
+    | Tuple [C2 BeforeTerm AfterTerm (Pattern ns)]
     | EmptyListPattern Comments
-    | List [Commented (Pattern ns)]
+    | List [C2 BeforeTerm AfterTerm (Pattern ns)]
     | ConsPattern
-        { first :: WithEol (Pattern ns)
+        { first :: C0Eol (Pattern ns)
         , rest :: Sequence (Pattern ns)
         }
     | EmptyRecordPattern Comments
-    | Record [Commented LowercaseIdentifier]
-    | Alias (Pattern ns, Comments) (Comments, LowercaseIdentifier)
+    | Record [C2 BeforeTerm AfterTerm LowercaseIdentifier]
+    | Alias (C1 After (Pattern ns)) (C1 Before LowercaseIdentifier)
     deriving (Eq, Show, Functor)
 
 
@@ -53,4 +53,4 @@ instance MapReferences a b (Pattern' a) (Pattern' b) where
         ConsPattern first rest -> ConsPattern (mapReferences fu fl first) (mapReferences fu fl rest)
         EmptyRecordPattern c -> EmptyRecordPattern c
         Record fs -> Record fs
-        Alias (p, c) as -> Alias (mapReferences fu fl p, c) as
+        Alias p as -> Alias (mapReferences fu fl p) as

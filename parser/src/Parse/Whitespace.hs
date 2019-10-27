@@ -10,12 +10,12 @@ import qualified Reporting.Error.Syntax as Syntax
 import Text.Parsec hiding (newline, spaces, State)
 
 
-padded :: IParser a -> IParser (Comments, a, Comments)
+padded :: IParser a -> IParser (C2 before after a)
 padded p =
   do  pre <- whitespace
       out <- p
       post <- whitespace
-      return (pre, out, post)
+      return $ C (pre, post) out
 
 
 spaces :: IParser Comments

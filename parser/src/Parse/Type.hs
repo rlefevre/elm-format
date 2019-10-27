@@ -22,26 +22,27 @@ tuple :: ElmVersion -> IParser (Type [UppercaseIdentifier])
 tuple elmVersion =
   addLocation $
   do  types <- parens'' (withEol $ expr elmVersion)
-      case types of
-        Left comments ->
-            return $ UnitType comments
-        Right [] ->
-            return $ UnitType []
-        Right [Commented [] (WithEol t Nothing) []] ->
-            return $ A.drop t
-        Right [Commented pre (WithEol t eol) post] ->
-            return $ TypeParens (Commented pre t (maybeToList (fmap LineComment eol) ++ post))
-        Right types' ->
-            return $ TupleType types'
+      return $
+          case types of
+              Left comments ->
+                  UnitType comments
+              Right [] ->
+                  UnitType []
+              Right [C ([], []) (C Nothing t)] ->
+                  A.drop t
+              Right [C (pre, post) (C eol t)] ->
+                  TypeParens $ C (pre, maybeToList (fmap LineComment eol) ++ post) t
+              Right types' ->
+                  TupleType $ fmap (\(C (pre, post) (C eol t)) -> C (pre, post, eol) t) types'
 
 
 record :: ElmVersion -> IParser (Type [UppercaseIdentifier])
 record elmVersion =
     addLocation $ brackets' $ checkMultiline $
         do
-            base <- optionMaybe $ try (commented (lowVar elmVersion) <* string "|")
-            (fields, trailing) <- sectionedGroup (pair (lowVar elmVersion) lenientHasType (expr elmVersion))
-            return $ RecordType base fields trailing
+            base' <- optionMaybe $ try (commented (lowVar elmVersion) <* string "|")
+            (fields', trailing) <- sectionedGroup (pair (lowVar elmVersion) lenientHasType (expr elmVersion))
+            return $ RecordType base' fields' trailing
 
 
 capTypeVar :: ElmVersion -> IParser [UppercaseIdentifier]
@@ -54,8 +55,8 @@ constructor0 elmVersion =
   do  name <- capTypeVar elmVersion
       case reverse name of
         [] -> error "Impossible empty TypeConstructor name"
-        last:rest ->
-            return (NamedConstructor (reverse rest, last))
+        last':rest' ->
+            return (NamedConstructor (reverse rest', last'))
 
 
 constructor0' :: ElmVersion -> IParser (Type [UppercaseIdentifier])
@@ -92,17 +93,17 @@ expr elmVersion =
       case result of
         Left t ->
           t
-        Right (region, first, rest, multiline) ->
-          A.A region $ FunctionType first rest (ForceMultiline multiline)
+        Right (region, first', rest', multiline) ->
+          A.A region $ FunctionType first' rest' (ForceMultiline multiline)
 
 
-constructor :: ElmVersion -> IParser ([UppercaseIdentifier], [(Comments, Type [UppercaseIdentifier])])
+constructor :: ElmVersion -> IParser ([UppercaseIdentifier], [C1 before (Type [UppercaseIdentifier])])
 constructor elmVersion =
   (,) <$> (capTypeVar elmVersion<?> "another type constructor")
       <*> spacePrefix (term elmVersion)
 
 
-tag :: ElmVersion -> IParser (UppercaseIdentifier, [(Comments, Type [UppercaseIdentifier])])
+tag :: ElmVersion -> IParser (UppercaseIdentifier, [C1 before (Type [UppercaseIdentifier])])
 tag elmVersion =
   (,) <$> (capVar elmVersion <?> "another type constructor")
       <*> spacePrefix (term elmVersion)

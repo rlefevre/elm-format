@@ -78,23 +78,21 @@ instance (Arbitrary a) => Arbitrary (Reporting.Annotation.Located a) where
             return $ Reporting.Annotation.A ann a
 
 
-commented :: Gen a -> Gen (Commented a)
+commented :: Gen a -> Gen (C2 before after a)
 commented inner =
-    do
-        a <- inner
-        return $ Commented [] a []
+    C ([], []) <$> inner
 
 
 instance Arbitrary AST.Variable.Value where
     arbitrary =
         do
             name <- capIdentifier
-            return $ AST.Variable.Union (name, []) AST.Variable.ClosedListing
+            return $ AST.Variable.Union (C [] name) AST.Variable.ClosedListing
 
 
 listing :: Gen (AST.Variable.Listing a)
 listing =
-    return $ AST.Variable.OpenListing (Commented [] () [])
+    return $ AST.Variable.OpenListing (C ([], []) ())
 
 
 instance Arbitrary AST.Module.Module where
@@ -107,10 +105,10 @@ instance Arbitrary AST.Module.Module where
                 []
                 (Just $ AST.Module.Header
                   moduleType
-                  (Commented [] name [])
+                  (C ([], []) name)
                   Nothing
-                  (Just $ KeywordCommented [] [] listing)
+                  (Just $ C ([], []) listing)
                 )
                 (located Nothing)
-                ([], empty)
+                (C [] empty)
                 [ AST.Declaration.Entry $ located $ AST.Declaration.Definition (located $ AST.Pattern.Anything) [] [] (Fix $ AE $ located $ AST.Expression.TupleFunction 2)]

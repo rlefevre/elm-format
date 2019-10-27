@@ -6,25 +6,25 @@ import AST.V0_16
 
 
 
-commented :: IParser a -> IParser (Commented a)
+commented :: IParser a -> IParser (C2 l1 l2 a)
 commented inner =
-    Commented <$> whitespace <*> inner <*> whitespace
+    (\c1 a c2 -> C (c1, c2) a) <$> whitespace <*> inner <*> whitespace
 
 
-postCommented :: IParser a -> IParser (PostCommented a)
+postCommented :: IParser a -> IParser (C1 l a)
 postCommented a =
-    (,) <$> a <*> whitespace
+    flip C <$> a <*> whitespace
 
 
-preCommented :: IParser a -> IParser (PreCommented a)
+preCommented :: IParser a -> IParser (C1 l a)
 preCommented a =
-    (,) <$> whitespace <*> a
+    C <$> whitespace <*> a
 
 
-withEol :: IParser a -> IParser (WithEol a)
+withEol :: IParser a -> IParser (C0Eol a)
 withEol a =
     do
         (result, multiline) <- trackNewline a
         case multiline of
-            SplitAll -> return $ WithEol result Nothing
-            JoinAll -> WithEol result <$> restOfLine
+            SplitAll -> return $ C Nothing result
+            JoinAll -> flip C result <$> restOfLine

@@ -47,7 +47,7 @@ typeDecl elmVersion =
 
       name <- capVar elmVersion
       args <- spacePrefix (lowVar elmVersion)
-      (preEquals, _, postEquals) <- padded equals
+      (C (preEquals, postEquals) _) <- padded equals
 
       case isAlias of
         Just postAlias ->
@@ -55,15 +55,15 @@ typeDecl elmVersion =
                 return $
                   AST.Declaration.TypeAlias
                     postType
-                    (Commented postAlias (name, args) preEquals)
-                    (postEquals, tipe)
+                    (C (postAlias, preEquals) (name, args))
+                    (C postEquals tipe)
 
         Nothing ->
             do
                 tags_ <- pipeSep1 (Type.tag elmVersion) <?> "a constructor for a union type"
                 return
                     AST.Declaration.Datatype
-                        { nameWithArgs = Commented postType (name, args) preEquals
+                        { nameWithArgs = C (postType, preEquals) (name, args)
                         , tags = exposedToOpen postEquals tags_
                         }
 
@@ -120,7 +120,7 @@ port elmVersion =
       preNameComments <- whitespace
       name <- lowVar elmVersion
       postNameComments <- whitespace
-      let name' = Commented preNameComments name postNameComments
+      let name' = C (preNameComments, postNameComments) name
       choice [ portAnnotation name', portDefinition name' ]
   where
     portAnnotation name =

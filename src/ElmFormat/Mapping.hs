@@ -15,12 +15,8 @@ instance MapNamespace a b t1 t2 => MapNamespace a b (A.Annotated ann t1) (A.Anno
     mapNamespace f (A.A ann t) = A.A ann (mapNamespace f t)
     {-# INLINE mapNamespace #-}
 
-instance MapNamespace a b t1 t2 => MapNamespace a b (Commented t1) (Commented t2) where
-    mapNamespace f (Commented pre t post) = Commented pre (mapNamespace f t) post
-    {-# INLINE mapNamespace #-}
-
-instance MapNamespace a b t1 t2 => MapNamespace a b (PreCommented t1) (PreCommented t2) where
-    mapNamespace f (c, t) = (c, mapNamespace f t)
+instance MapNamespace a b t1 t2 => MapNamespace a b (Commented c t1) (Commented c t2) where
+    mapNamespace f = fmap (mapNamespace f)
     {-# INLINE mapNamespace #-}
 
 instance MapNamespace a b t1 t2 => MapNamespace a b (List t1) (List t2) where
@@ -52,16 +48,8 @@ instance MapReferences a b t1 t2 => MapReferences a b (A.Annotated ann t1) (A.An
     mapReferences fu fl (A.A ann t) = A.A ann (mapReferences fu fl t)
     {-# INLINE mapReferences #-}
 
-instance MapReferences a b t1 t2 => MapReferences a b (Commented t1) (Commented t2) where
-    mapReferences fu fl (Commented pre t post) = Commented pre (mapReferences fu fl t) post
-    {-# INLINE mapReferences #-}
-
-instance MapReferences a b t1 t2 => MapReferences a b (PreCommented t1) (PreCommented t2) where
-    mapReferences fu fl (c, t) = (c, mapReferences fu fl t)
-    {-# INLINE mapReferences #-}
-
-instance MapReferences a b t1 t2 => MapReferences a b (WithEol t1) (WithEol t2) where
-    mapReferences fu fl (WithEol t eol) = WithEol (mapReferences fu fl t) eol
+instance MapReferences a b t1 t2 => MapReferences a b (Commented c t1) (Commented c t2) where
+    mapReferences fu fl = fmap (mapReferences fu fl)
     {-# INLINE mapReferences #-}
 
 instance MapReferences a b t1 t2 => MapReferences a b (Pair x t1) (Pair x t2) where
@@ -100,16 +88,8 @@ instance MapType a b t1 t2 => MapType a b (A.Annotated ann t1) (A.Annotated ann 
     mapType f (A.A ann t) = A.A ann (mapType f t)
     {-# INLINE mapType #-}
 
-instance MapType a b t1 t2 => MapType a b (Commented t1) (Commented t2) where
-    mapType f (Commented pre t post) = Commented pre (mapType f t) post
-    {-# INLINE mapType #-}
-
-instance MapType a b t1 t2 => MapType a b (PreCommented t1) (PreCommented t2) where
-    mapType f (c, t) = (c, mapType f t)
-    {-# INLINE mapType #-}
-
-instance MapType a b t1 t2 => MapType a b (WithEol t1) (WithEol t2) where
-    mapType f (WithEol t eol) = WithEol (mapType f t) eol
+instance MapType a b t1 t2 => MapType a b (Commented c t1) (Commented c t2) where
+    mapType f = fmap (mapType f)
     {-# INLINE mapType #-}
 
 instance MapType a b t1 t2 => MapType a b (Pair x t1) (Pair x t2) where

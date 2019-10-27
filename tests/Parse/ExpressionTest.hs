@@ -45,23 +45,23 @@ example' name input expected =
 
 
 commentedIntExpr (a,b,c,d) preComment postComment i =
-    Commented [BlockComment [preComment]] (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt) [BlockComment [postComment]]
+    C ([BlockComment [preComment]], [BlockComment [postComment]]) (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt)
 
 commentedIntExpr' (a,b,c,d) preComment i =
-    Commented [BlockComment [preComment]] (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt) []
+    C ([BlockComment [preComment]], []) (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt)
 
 
 commentedIntExpr'' (a,b,c,d) preComment i =
-    (,) [BlockComment [preComment]] $ Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt
+    C [BlockComment [preComment]] $ Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt
 
 
 intExpr (a,b,c,d) i = Fix $ AE $ at a b c d $ Literal $ IntNum i DecimalInt
 
 intExpr' (a,b,c,d) i =
-    Commented [] (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt) []
+    C ([], []) (Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt)
 
 intExpr'' (a,b,c,d) i =
-    (,) [] $ Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt
+    C [] $ Fix $ AE $ at a b c d  $ Literal $ IntNum i DecimalInt
 
 
 tests :: TestTree
@@ -99,7 +99,7 @@ tests =
 
     , testGroup "function application"
         [ example "" "f 7 8" $ Fix $ AE $ at 1 1 1 6 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [intExpr'' (1,3,1,4) 7, intExpr'' (1,5,1,6) 8] (FAJoinFirst JoinAll)
-        , example "argument starts with minus" "f -9 -x" $ Fix $ AE $ at 1 1 1 8 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [intExpr'' (1,3,1,5) (-9), (,) [] $ Fix $ AE $ at 1 6 1 8 $ Unary Negative $ Fix $ AE $ at 1 7 1 8 $ VarExpr $ VarRef [] $ LowercaseIdentifier "x"] (FAJoinFirst JoinAll)
+        , example "argument starts with minus" "f -9 -x" $ Fix $ AE $ at 1 1 1 8 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [intExpr'' (1,3,1,5) (-9), C [] $ Fix $ AE $ at 1 6 1 8 $ Unary Negative $ Fix $ AE $ at 1 7 1 8 $ VarExpr $ VarRef [] $ LowercaseIdentifier "x"] (FAJoinFirst JoinAll)
         , example "comments" "f{-A-}7{-B-}8" $ Fix $ AE $ at 1 1 1 14 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [commentedIntExpr'' (1,7,1,8) "A" 7, commentedIntExpr'' (1,13,1,14) "B" 8] (FAJoinFirst JoinAll)
         , example "newlines (1)" "f 7\n 8" $ Fix $ AE $ at 1 1 2 3 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [intExpr'' (1,3,1,4) 7, intExpr'' (2,2,2,3) 8] (FAJoinFirst SplitAll)
         , example "newlines (2)" "f\n 7\n 8" $ Fix $ AE $ at 1 1 3 3 $ App (Fix $ AE $ at 1 1 1 2 $ VarExpr $ VarRef [] $ LowercaseIdentifier "f") [intExpr'' (2,2,2,3) 7, intExpr'' (3,2,3,3) 8] FASplitFirst
@@ -254,20 +254,20 @@ tests =
         ]
 
     , testGroup "lambda"
-        [ example "" "\\x y->9" $ Fix $ AE $ at 1 1 1 8 $ Lambda [([], at 1 2 1 3 $ P.VarPattern $ LowercaseIdentifier "x"), ([], at 1 4 1 5 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (1,7,1,8) 9) False
-        , example "single parameter" "\\x->9" $ Fix $ AE $ at 1 1 1 6 $ Lambda [([], at 1 2 1 3 $ P.VarPattern $ LowercaseIdentifier "x")] [] (intExpr (1,5,1,6) 9) False
-        , example "whitespace" "\\ x y -> 9" $ Fix $ AE $ at 1 1 1 11 $ Lambda [([], at 1 3 1 4 $ P.VarPattern $ LowercaseIdentifier "x"), ([], at 1 5 1 6 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (1,10,1,11) 9) False
-        , example "comments" "\\{-A-}x{-B-}y{-C-}->{-D-}9" $ Fix $ AE $ at 1 1 1 27 $ Lambda [([BlockComment ["A"]], at 1 7 1 8 $ P.VarPattern $ LowercaseIdentifier "x"), ([BlockComment ["B"]], at 1 13 1 14 $ P.VarPattern $ LowercaseIdentifier "y")] [BlockComment ["C"], BlockComment ["D"]] (intExpr (1,26,1,27) 9) False
-        , example "newlines" "\\\n x\n y\n ->\n 9" $ Fix $ AE $ at 1 1 5 3 $ Lambda [([], at 2 2 2 3 $ P.VarPattern $ LowercaseIdentifier "x"), ([], at 3 2 3 3 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (5,2,5,3) 9) True
+        [ example "" "\\x y->9" $ Fix $ AE $ at 1 1 1 8 $ Lambda [C [] ( at 1 2 1 3 $ P.VarPattern $ LowercaseIdentifier "x"), C [] ( at 1 4 1 5 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (1,7,1,8) 9) False
+        , example "single parameter" "\\x->9" $ Fix $ AE $ at 1 1 1 6 $ Lambda [C [] ( at 1 2 1 3 $ P.VarPattern $ LowercaseIdentifier "x")] [] (intExpr (1,5,1,6) 9) False
+        , example "whitespace" "\\ x y -> 9" $ Fix $ AE $ at 1 1 1 11 $ Lambda [C [] ( at 1 3 1 4 $ P.VarPattern $ LowercaseIdentifier "x"), C [] ( at 1 5 1 6 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (1,10,1,11) 9) False
+        , example "comments" "\\{-A-}x{-B-}y{-C-}->{-D-}9" $ Fix $ AE $ at 1 1 1 27 $ Lambda [C [BlockComment ["A"]] ( at 1 7 1 8 $ P.VarPattern $ LowercaseIdentifier "x"), C [BlockComment ["B"]] ( at 1 13 1 14 $ P.VarPattern $ LowercaseIdentifier "y")] [BlockComment ["C"], BlockComment ["D"]] (intExpr (1,26,1,27) 9) False
+        , example "newlines" "\\\n x\n y\n ->\n 9" $ Fix $ AE $ at 1 1 5 3 $ Lambda [C [] ( at 2 2 2 3 $ P.VarPattern $ LowercaseIdentifier "x"), C [] ( at 3 2 3 3 $ P.VarPattern $ LowercaseIdentifier "y")] [] (intExpr (5,2,5,3) 9) True
         , testCase "arrow must not contain whitespace" $
             assertParseFailure (expr Elm_0_19) "\\x y - > 9"
         ]
 
     , testGroup "if statement"
-        [ example "" "if x then y else z" $ Fix $ AE $ at 1 1 1 19 (If (IfClause (Commented [] (Fix $ AE $ at 1 4 1 5 (VarExpr (VarRef [] $ LowercaseIdentifier "x"))) []) (Commented [] (Fix $ AE $ at 1 11 1 12 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))) [])) [] ([],Fix $ AE $ at 1 18 1 19 (VarExpr (VarRef [] $ LowercaseIdentifier "z"))))
-        , example "comments" "if{-A-}x{-B-}then{-C-}y{-D-}else{-E-}if{-F-}x_{-G-}then{-H-}y_{-I-}else{-J-}z" $ Fix $ AE $ at 1 1 1 78 (If (IfClause (Commented [BlockComment ["A"]] (Fix $ AE $ at 1 8 1 9 (VarExpr (VarRef [] $ LowercaseIdentifier "x"))) [BlockComment ["B"]]) (Commented [BlockComment ["C"]] (Fix $ AE $ at 1 23 1 24 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))) [BlockComment ["D"]])) [([BlockComment ["E"]],IfClause (Commented [BlockComment ["F"]] (Fix $ AE $ at 1 45 1 47 (VarExpr (VarRef [] $ LowercaseIdentifier "x_"))) [BlockComment ["G"]]) (Commented [BlockComment ["H"]] (Fix $ AE $ at 1 61 1 63 (VarExpr (VarRef [] $ LowercaseIdentifier "y_"))) [BlockComment ["I"]]))] ([BlockComment ["J"]],Fix $ AE $ at 1 77 1 78 (VarExpr (VarRef [] $ LowercaseIdentifier "z"))))
-        , example "else if" "if x1 then y1 else if x2 then y2 else if x3 then y3 else z" $ Fix $ AE $ at 1 1 1 59 (If (IfClause (Commented [] (Fix $ AE $ at 1 4 1 6 (VarExpr (VarRef [] $ LowercaseIdentifier "x1"))) []) (Commented [] (Fix $ AE $ at 1 12 1 14 (VarExpr (VarRef [] $ LowercaseIdentifier "y1"))) [])) [([],IfClause (Commented [] (Fix $ AE $ at 1 23 1 25 (VarExpr (VarRef [] $ LowercaseIdentifier "x2"))) []) (Commented [] (Fix $ AE $ at 1 31 1 33 (VarExpr (VarRef [] $ LowercaseIdentifier "y2"))) [])),([],IfClause (Commented [] (Fix $ AE $ at 1 42 1 44 (VarExpr (VarRef [] $ LowercaseIdentifier "x3"))) []) (Commented [] (Fix $ AE $ at 1 50 1 52 (VarExpr (VarRef [] $ LowercaseIdentifier "y3"))) []))] ([],Fix $ AE $ at 1 58 1 59 (VarExpr (VarRef [] $ LowercaseIdentifier "z"))))
-        , example "newlines" "if\n x\n then\n y\n else\n z" $ Fix $ AE $ at 1 1 6 3 (If (IfClause (Commented [] (Fix $ AE $ at 2 2 2 3 (VarExpr (VarRef [] $ LowercaseIdentifier "x"))) []) (Commented [] (Fix $ AE $ at 4 2 4 3 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))) [])) [] ([],Fix $ AE $ at 6 2 6 3 (VarExpr (VarRef [] $ LowercaseIdentifier "z"))))
+        [ example "" "if x then y else z" $ Fix $ AE $ at 1 1 1 19 (If (IfClause (C ([], []) (Fix $ AE $ at 1 4 1 5 (VarExpr (VarRef [] $ LowercaseIdentifier "x")))) (C ([], []) (Fix $ AE $ at 1 11 1 12 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))))) [] (C [] (Fix $ AE $ at 1 18 1 19 (VarExpr (VarRef [] $ LowercaseIdentifier "z")))))
+        , example "comments" "if{-A-}x{-B-}then{-C-}y{-D-}else{-E-}if{-F-}x_{-G-}then{-H-}y_{-I-}else{-J-}z" $ Fix $ AE $ at 1 1 1 78 (If (IfClause (C ([BlockComment ["A"]], [BlockComment ["B"]]) (Fix $ AE $ at 1 8 1 9 (VarExpr (VarRef [] $ LowercaseIdentifier "x")))) (C ([BlockComment ["C"]], [BlockComment ["D"]]) (Fix $ AE $ at 1 23 1 24 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))))) [C [BlockComment ["E"]] (IfClause (C ([BlockComment ["F"]], [BlockComment ["G"]]) (Fix $ AE $ at 1 45 1 47 (VarExpr (VarRef [] $ LowercaseIdentifier "x_")))) (C ([BlockComment ["H"]], [BlockComment ["I"]]) (Fix $ AE $ at 1 61 1 63 (VarExpr (VarRef [] $ LowercaseIdentifier "y_")))))] (C [BlockComment ["J"]] (Fix $ AE $ at 1 77 1 78 (VarExpr (VarRef [] $ LowercaseIdentifier "z")))))
+        , example "else if" "if x1 then y1 else if x2 then y2 else if x3 then y3 else z" $ Fix $ AE $ at 1 1 1 59 (If (IfClause (C ([], []) (Fix $ AE $ at 1 4 1 6 (VarExpr (VarRef [] $ LowercaseIdentifier "x1")))) (C ([], []) (Fix $ AE $ at 1 12 1 14 (VarExpr (VarRef [] $ LowercaseIdentifier "y1"))))) [C [] (IfClause (C ([], []) (Fix $ AE $ at 1 23 1 25 (VarExpr (VarRef [] $ LowercaseIdentifier "x2")))) (C ([], []) (Fix $ AE $ at 1 31 1 33 (VarExpr (VarRef [] $ LowercaseIdentifier "y2"))))),C [] (IfClause (C ([], []) (Fix $ AE $ at 1 42 1 44 (VarExpr (VarRef [] $ LowercaseIdentifier "x3")))) (C ([], []) (Fix $ AE $ at 1 50 1 52 (VarExpr (VarRef [] $ LowercaseIdentifier "y3")))))] (C [] (Fix $ AE $ at 1 58 1 59 (VarExpr (VarRef [] $ LowercaseIdentifier "z")))))
+        , example "newlines" "if\n x\n then\n y\n else\n z" $ Fix $ AE $ at 1 1 6 3 (If (IfClause (C ([], []) (Fix $ AE $ at 2 2 2 3 (VarExpr (VarRef [] $ LowercaseIdentifier "x")))) (C ([], []) (Fix $ AE $ at 4 2 4 3 (VarExpr (VarRef [] $ LowercaseIdentifier "y"))))) [] (C [] (Fix $ AE $ at 6 2 6 3 (VarExpr (VarRef [] $ LowercaseIdentifier "z")))))
         ]
 
     , testGroup "let statement"
@@ -287,11 +287,11 @@ tests =
         ]
 
     , testGroup "case statement"
-        [ example "" "case 9 of\n 1->10\n _->20" $ Fix $ AE $ at 1 1 3 7 (Case (Commented [] (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))) [],False) [(Commented [] (at 2 2 2 3 (P.Literal (IntNum 1 DecimalInt))) [],([],Fix $ AE $ at 2 5 2 7 (Literal (IntNum 10 DecimalInt)))),(Commented [] (at 3 2 3 3 Anything) [],([],Fix $ AE $ at 3 5 3 7 (Literal (IntNum 20 DecimalInt))))])
-        , example "no newline after 'of'" "case 9 of 1->10\n          _->20" $ Fix $ AE $ at 1 1 2 16 (Case (Commented [] (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))) [],False) [(Commented [] (at 1 11 1 12 (P.Literal (IntNum 1 DecimalInt))) [],([],Fix $ AE $ at 1 14 1 16 (Literal (IntNum 10 DecimalInt)))),(Commented [] (at 2 11 2 12 Anything) [],([],Fix $ AE $ at 2 14 2 16 (Literal (IntNum 20 DecimalInt))))])
-        , example "whitespace" "case 9 of\n 1 -> 10\n _ -> 20" $ Fix $ AE $ at 1 1 3 9 (Case (Commented [] (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))) [],False) [(Commented [] (at 2 2 2 3 (P.Literal (IntNum 1 DecimalInt))) [],([],Fix $ AE $ at 2 7 2 9 (Literal (IntNum 10 DecimalInt)))),(Commented [] (at 3 2 3 3 Anything) [],([],Fix $ AE $ at 3 7 3 9 (Literal (IntNum 20 DecimalInt))))])
-        , example "comments" "case{-A-}9{-B-}of{-C-}\n{-D-}1{-E-}->{-F-}10{-G-}\n{-H-}_{-I-}->{-J-}20" $ Fix $ AE $ at 1 1 3 21 (Case (Commented [BlockComment ["A"]] (Fix $ AE $ at 1 10 1 11 (Literal (IntNum 9 DecimalInt))) [BlockComment ["B"]],False) [(Commented [BlockComment ["C"],BlockComment ["D"]] (at 2 6 2 7 (P.Literal (IntNum 1 DecimalInt))) [BlockComment ["E"]],([BlockComment ["F"]],Fix $ AE $ at 2 19 2 21 (Literal (IntNum 10 DecimalInt)))),(Commented [BlockComment ["G"],BlockComment ["H"]] (at 3 6 3 7 Anything) [BlockComment ["I"]],([BlockComment ["J"]],Fix $ AE $ at 3 19 3 21 (Literal (IntNum 20 DecimalInt))))])
-        , example "newlines" "case\n 9\n of\n 1\n ->\n 10\n _\n ->\n 20" $ Fix $ AE $ at 1 1 9 4 (Case (Commented [] (Fix $ AE $ at 2 2 2 3 (Literal (IntNum 9 DecimalInt))) [],True) [(Commented [] (at 4 2 4 3 (P.Literal (IntNum 1 DecimalInt))) [],([],Fix $ AE $ at 6 2 6 4 (Literal (IntNum 10 DecimalInt)))),(Commented [] (at 7 2 7 3 Anything) [],([],Fix $ AE $ at 9 2 9 4 (Literal (IntNum 20 DecimalInt))))])
+        [ example "" "case 9 of\n 1->10\n _->20" $ Fix $ AE $ at 1 1 3 7 (Case (C ([], []) (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))),False) [CaseBranch [] [] [] (at 2 2 2 3 $ P.Literal $ IntNum 1 DecimalInt) (Fix $ AE $ at 2 5 2 7 $ Literal $ IntNum 10 DecimalInt), CaseBranch [] [] [] (at 3 2 3 3 Anything) (Fix $ AE $ at 3 5 3 7 $ Literal $ IntNum 20 DecimalInt)])
+        , example "no newline after 'of'" "case 9 of 1->10\n          _->20" $ Fix $ AE $ at 1 1 2 16 (Case (C ([], []) (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))),False) [CaseBranch []  [] [] (at 1 11 1 12 $ P.Literal $ IntNum 1 DecimalInt) (Fix $ AE $ at 1 14 1 16 $ Literal $ IntNum 10 DecimalInt), CaseBranch [] [] [] (at 2 11 2 12 Anything) (Fix $ AE $ at 2 14 2 16 $ Literal $ IntNum 20 DecimalInt)])
+        , example "whitespace" "case 9 of\n 1 -> 10\n _ -> 20" $ Fix $ AE $ at 1 1 3 9 (Case (C ([], []) (Fix $ AE $ at 1 6 1 7 (Literal (IntNum 9 DecimalInt))),False) [CaseBranch [] [] [] (at 2 2 2 3 $ P.Literal $ IntNum 1 DecimalInt) (Fix $ AE $ at 2 7 2 9 $ Literal $ IntNum 10 DecimalInt), CaseBranch [] [] [] (at 3 2 3 3 Anything) (Fix $ AE $ at 3 7 3 9 $ Literal $ IntNum 20 DecimalInt)])
+        , example "comments" "case{-A-}9{-B-}of{-C-}\n{-D-}1{-E-}->{-F-}10{-G-}\n{-H-}_{-I-}->{-J-}20" $ Fix $ AE $ at 1 1 3 21 (Case (C ([BlockComment ["A"]], [BlockComment ["B"]]) (Fix $ AE $ at 1 10 1 11 (Literal (IntNum 9 DecimalInt))),False) [CaseBranch [BlockComment ["C"],BlockComment ["D"]] [BlockComment ["E"]] [BlockComment ["F"]] (at 2 6 2 7 $ P.Literal $ IntNum 1 DecimalInt) (Fix $ AE $ at 2 19 2 21 $ Literal $ IntNum 10 DecimalInt), CaseBranch [BlockComment ["G"],BlockComment ["H"]] [BlockComment ["I"]] [BlockComment ["J"]] (at 3 6 3 7 Anything) (Fix $ AE $ at 3 19 3 21 $ Literal $ IntNum 20 DecimalInt)])
+        , example "newlines" "case\n 9\n of\n 1\n ->\n 10\n _\n ->\n 20" $ Fix $ AE $ at 1 1 9 4 (Case (C ([], []) (Fix $ AE $ at 2 2 2 3 (Literal (IntNum 9 DecimalInt))),True) [CaseBranch [] [] [] (at 4 2 4 3 $ P.Literal $ IntNum 1 DecimalInt) (Fix $ AE $ at 6 2 6 4 $ Literal $ IntNum 10 DecimalInt), CaseBranch [] [] [] (at 7 2 7 3 Anything) (Fix $ AE $ at 9 2 9 4 $ Literal $ IntNum 20 DecimalInt)])
         , testCase "should not consume trailing whitespace" $
             assertParse (expr Elm_0_19>> string "\nX") "case 9 of\n 1->10\n _->20\nX" $ "\nX"
         , testGroup "clauses must start at the same column"

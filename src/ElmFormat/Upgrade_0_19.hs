@@ -65,7 +65,7 @@ data UpgradeDefinition =
             Dict.Map
                 ([UppercaseIdentifier], UppercaseIdentifier)
                 ([LowercaseIdentifier], Type' (MatchedNamespace [UppercaseIdentifier]))
-        , _imports :: Dict.Map [UppercaseIdentifier] (Comments, ImportMethod)
+        , _imports :: Dict.Map [UppercaseIdentifier] (C1 Before ImportMethod)
         }
     deriving Show
 
@@ -74,14 +74,14 @@ knownContents upgradeDefinition ns =
     DetailedListing
         { values =
             Dict.fromList
-            $ fmap (flip (,) (Commented [] () []) . LowercaseIdentifier . snd)
+            $ fmap (flip (,) (C ([], []) ()) . LowercaseIdentifier . snd)
             $ filter ((==) ns . fst)
             $ Dict.keys
             $ _replacements upgradeDefinition
         , operators = mempty
         , types =
             Dict.fromList
-            $ fmap (flip (,) (Commented [] ([], ClosedListing) []) . snd)
+            $ fmap (flip (,) (C ([], []) (C [] ClosedListing)) . snd)
             $ filter ((==) ns . fst)
             $ Dict.keys
             $ _typeReplacements upgradeDefinition
@@ -91,7 +91,7 @@ knownContents upgradeDefinition ns =
 parseUpgradeDefinition :: Text.Text -> Either () UpgradeDefinition
 parseUpgradeDefinition definitionText =
     case ElmFormat.Parse.parse Elm_0_19 definitionText of
-        Result.Result _ (Result.Ok modu@(Module _ _ _ (_, imports) body)) ->
+        Result.Result _ (Result.Ok modu@(Module _ _ _ (C _ imports) body)) ->
             let
                 importInfo = ImportInfo.fromModule (const mempty) modu
 
@@ -128,10 +128,10 @@ parseUpgradeDefinition definitionText =
                 matchReferences' = matchReferences importInfo
 
                 getTypeReplacement = \case
-                    Entry (A _ (TypeAlias comments (Commented _ (name, args) _) (_, A _ typ))) ->
+                    Entry (A _ (TypeAlias comments (C _ (name, args)) (C _ (A _ typ)))) ->
                         case makeTypeName name of
                             Just typeName ->
-                                Just (typeName, (fmap snd args, mapReferences' matchReferences' typ))
+                                Just (typeName, (fmap dropComments args, mapReferences' matchReferences' typ))
 
                             Nothing -> Nothing
 
@@ -172,7 +172,7 @@ transform importInfo =
 
 
 transformModule :: UpgradeDefinition -> Module -> Module
-transformModule upgradeDefinition modu@(Module a b c (preImports, originalImports) originalBody') =
+transformModule upgradeDefinition modu@(Module a b c (C preImports originalImports) originalBody') =
     let
         importInfo =
             -- Note: this is the info used for matching references in the
@@ -225,10 +225,9 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
                     -- Note: The formatter will handle converting to a closed listing if nothing is left
                     ExplicitListing (DetailedListing vars ops typs') ml
 
-        removeUpgradedExposings ns (pre, ImportMethod alias exposing) =
-            ( pre
-            , ImportMethod alias (fmap (fmap $ removeTypes $ fromMaybe Set.empty $ Dict.lookup ns typeReplacementsByModule) exposing)
-            )
+        removeUpgradedExposings ns (C pre (ImportMethod alias exposing)) =
+            C pre $
+                ImportMethod alias (fmap (removeTypes $ fromMaybe Set.empty $ Dict.lookup ns typeReplacementsByModule) exposing)
 
         originalBody =
             mapReferences' (matchReferences importInfo) <$> originalBody'
@@ -244,19 +243,19 @@ transformModule upgradeDefinition modu@(Module a b c (preImports, originalImport
                 (usages finalBody)
 
         finalImportInfo =
-            ImportInfo.fromImports (const mempty) $ fmap snd finalImports
+            ImportInfo.fromImports (const mempty) $ fmap dropComments finalImports
     in
     finalBody
         |> fmap (mapReferences' (applyReferences finalImportInfo))
-        |> Module a b c (preImports, finalImports)
+        |> Module a b c (C preImports finalImports)
 
 
 mergeUpgradeImports ::
-    Dict.Map [UppercaseIdentifier] (Comments, ImportMethod)
-    -> Dict.Map [UppercaseIdentifier] (Comments, ImportMethod)
+    Dict.Map [UppercaseIdentifier] (C1 before ImportMethod)
+    -> Dict.Map [UppercaseIdentifier] (C1 before ImportMethod)
     -> Set.Set [UppercaseIdentifier]
     -> Dict.Map (MatchedNamespace [UppercaseIdentifier]) Int
-    -> Dict.Map [UppercaseIdentifier] (Comments, ImportMethod)
+    -> Dict.Map [UppercaseIdentifier] (C1 before ImportMethod)
 mergeUpgradeImports originalImports upgradeImports upgradesAttempted usagesAfter =
     let
         -- uBefore ns = Maybe.fromMaybe 0 $ Dict.lookup (MatchedImport ns) usagesBefore
@@ -376,7 +375,7 @@ transformType upgradeDefinition typ = case typ of
             Just (argOrder, newTyp) ->
                 let
                     inlines =
-                        Dict.fromList $ zip argOrder (fmap (RA.drop . snd) args)
+                        Dict.fromList $ zip argOrder (fmap (RA.drop . dropComments) args)
                 in
                 mapType (inlineTypeVars inlines) newTyp
 
@@ -420,8 +419,8 @@ applyUpgrades upgradeDefinition importInfo expr =
                       [makeArg "dividend", makeArg "modulus"] []
                       (Fix $ App
                           (makeVarRef "modBy")
-                          [ ([], makeVarRef "modulus")
-                          , ([], makeVarRef "dividend")
+                          [ C [] $ makeVarRef "modulus"
+                          , C [] $ makeVarRef "dividend"
                           ]
                           (FAJoinFirst JoinAll)
                       )
@@ -440,7 +439,7 @@ applyUpgrades upgradeDefinition importInfo expr =
                 Fix $ Lambda
                     (fmap makeArg vars)
                     []
-                    (Fix $ AST.Expression.Tuple (fmap (\v -> Commented [] (makeVarRef v) []) vars) False)
+                    (Fix $ AST.Expression.Tuple (fmap (\v -> C ([], []) (makeVarRef v)) vars) False)
                     False
     in
     case unFix expr of
@@ -464,8 +463,8 @@ applyUpgrades upgradeDefinition importInfo expr =
 simplify :: UExpr -> UExpr
 simplify expr =
     let
-        isElmFixRemove (_, (_, WithEol (Fix (AE (A FromUpgradeDefinition (VarExpr (VarRef (MatchedImport [UppercaseIdentifier "ElmFix"]) (LowercaseIdentifier "remove")))))) _))= True
-        isElmFixRemove (_, (_, WithEol (Fix (AE (A FromUpgradeDefinition (VarExpr (VarRef (Unmatched [UppercaseIdentifier "ElmFix"]) (LowercaseIdentifier "remove")))))) _))= True
+        isElmFixRemove (C _ (Fix (AE (A FromUpgradeDefinition (VarExpr (VarRef (MatchedImport [UppercaseIdentifier "ElmFix"]) (LowercaseIdentifier "remove")))))))= True
+        isElmFixRemove (C _ (Fix (AE (A FromUpgradeDefinition (VarExpr (VarRef (Unmatched [UppercaseIdentifier "ElmFix"]) (LowercaseIdentifier "remove")))))))= True
         isElmFixRemove _ = False
     in
     case unFix expr of
@@ -484,29 +483,29 @@ simplify expr =
         AE (A FromUpgradeDefinition (Access e field)) ->
             case e of
                 Fix (AE (A _ (AST.Expression.Record _ fs _ _))) ->
-                    case List.find (\(_, (_, WithEol (Pair (f, _) _ _) _)) -> f == field) fs of
+                    case List.find (\(C _ (Pair (C _ f) _ _)) -> f == field) fs of
                         Nothing ->
                             expr
-                        Just (_, (_, WithEol (Pair _ (_, fieldValue) _) _)) ->
+                        Just (C _ (Pair _ (C _ fieldValue) _)) ->
                             fieldValue
                 _ ->
                     expr
 
         -- reduce if expressions with a literal bool condition
-        AE (A FromUpgradeDefinition (If (IfClause (Commented preCond cond postCond) (Commented preIf ifBody postIf)) [] (preElse, elseBody))) ->
-            destructureFirstMatch (preCond, cond)
-                [ (([], noRegion $ AST.Pattern.Literal $ Boolean True), ifBody) -- TODO: not tested
-                , (([], noRegion $ AST.Pattern.Literal $ Boolean False), elseBody)
+        AE (A FromUpgradeDefinition (If (IfClause (C (preCond, postCond) cond) (C (preIf, postIf) ifBody)) [] (C preElse elseBody))) ->
+            destructureFirstMatch (C preCond cond)
+                [ (C [] $ noRegion $ AST.Pattern.Literal $ Boolean True, ifBody) -- TODO: not tested
+                , (C [] $ noRegion $ AST.Pattern.Literal $ Boolean False, elseBody)
                 ]
                 expr
 
         -- reduce case expressions
-        AE (A FromUpgradeDefinition (Case (Commented pre term post, _) branches)) ->
+        AE (A FromUpgradeDefinition (Case (C (pre, post) term, _) branches)) ->
             let
-                makeBranch (Commented prePattern p1 postPattern, (_, b1)) =
-                    ((prePattern, p1), b1)
+                makeBranch (CaseBranch prePattern postPattern _ p1 b1) =
+                    (C prePattern p1, b1)
             in
-            destructureFirstMatch (pre, term)
+            destructureFirstMatch (C pre term)
                 (fmap makeBranch branches)
                 expr
 
@@ -514,17 +513,17 @@ simplify expr =
             expr
 
 
-expandHtmlStyle :: Bool -> (Comments, PreCommented (WithEol UExpr)) -> [(Comments, PreCommented (WithEol UExpr))]
-expandHtmlStyle styleExposed (preComma, (pre, WithEol term eol)) =
+expandHtmlStyle :: Bool -> C2Eol preComma pre UExpr -> [C2Eol preComma pre UExpr]
+expandHtmlStyle styleExposed (C (preComma, pre, eol) term) =
     let
         lambda fRef =
             addAnnotation FromUpgradeDefinition $ Fix $
             Lambda
-                [([], noRegion $ AST.Pattern.Tuple [makeArg' "a", makeArg' "b"]) ] []
+                [(C [] $ noRegion $ AST.Pattern.Tuple [makeArg' "a", makeArg' "b"]) ] []
                 (Fix $ App
                     (Fix $ VarExpr $ fRef)
-                    [ ([], makeVarRef "a")
-                    , ([], makeVarRef "b")
+                    [ (C [] $ makeVarRef "a")
+                    , (C [] $ makeVarRef "b")
                     ]
                     (FAJoinFirst JoinAll)
                 )
@@ -537,21 +536,22 @@ expandHtmlStyle styleExposed (preComma, (pre, WithEol term eol)) =
                 _ -> False
     in
     case dropAnnotation term of
-        App (Fix (AE (A _ (VarExpr var)))) [(preStyle, Fix (AE (A _ (ExplicitList styles trailing _))))] _
+        App (Fix (AE (A _ (VarExpr var)))) [C preStyle (Fix (AE (A _ (ExplicitList styles trailing _))))] _
           | isHtmlAttributesStyle var
           ->
             let
-                convert (preComma', (pre', WithEol style eol')) =
-                    ( preComma ++ preComma'
-                    , ( pre++ preStyle ++ pre' ++ trailing ++ (Maybe.maybeToList $ fmap LineComment eol)
-                      , WithEol (Fix $ AE $ A FromUpgradeDefinition $ App (lambda var) [([], style)] (FAJoinFirst JoinAll)) eol'
-                      )
-                    )
+                convert (C (preComma', pre', eol') style) =
+                    C
+                        ( preComma ++ preComma'
+                        , pre ++ preStyle ++ pre' ++ trailing ++ (Maybe.maybeToList $ fmap LineComment eol)
+                        , eol'
+                        )
+                        (Fix $ AE $ A FromUpgradeDefinition $ App (lambda var) [C [] style] (FAJoinFirst JoinAll))
             in
             fmap convert styles
 
         _ ->
-            [(preComma, (pre, WithEol term eol))]
+            [C (preComma, pre, eol) term]
 
 --
 -- Generic helpers
@@ -579,14 +579,14 @@ noRegion =
     RA.at nowhere nowhere
 
 
-makeArg :: String -> (Comments, Pattern ns)
+makeArg :: String -> (C1 before (Pattern ns))
 makeArg varName =
-    ([], noRegion $ VarPattern $ LowercaseIdentifier varName)
+    (C [] $ noRegion $ VarPattern $ LowercaseIdentifier varName)
 
 
-makeArg' :: String -> Commented (Pattern ns)
+makeArg' :: String -> C2 before after (Pattern ns)
 makeArg' varName =
-    Commented [] (noRegion $ VarPattern $ LowercaseIdentifier varName) []
+    C ([], []) (noRegion $ VarPattern $ LowercaseIdentifier varName)
 
 
 makeVarRef :: String -> Fix (Expression (MatchedNamespace any))
@@ -621,7 +621,7 @@ inlineVars isLocal insertMultiline mappings expr =
 
         AE (A ann (AST.Expression.Tuple terms' multiline)) ->
             let
-                requestedMultiline (Commented _ (Fix (AE (A (m, _) _))) _) = m
+                requestedMultiline (C _ (Fix (AE (A (m, _) _)))) = m
                 newMultiline = multiline || any requestedMultiline terms'
             in
             Fix $ AE $ A ann $ AST.Expression.Tuple terms' newMultiline
@@ -645,7 +645,7 @@ inlineTypeVars mappings typ =
         _ -> typ
 
 
-destructureFirstMatch :: PreCommented UExpr -> [ (PreCommented (Pattern (MatchedNamespace [UppercaseIdentifier])), UExpr) ] -> UExpr -> UExpr
+destructureFirstMatch :: C1 before UExpr -> [ (C1 before (Pattern (MatchedNamespace [UppercaseIdentifier])), UExpr) ] -> UExpr -> UExpr
 destructureFirstMatch value choices fallback =
     -- If we find an option that Matches, use the first one we find.
     -- Otherwise, keep track of which ones *could* match -- if there is only one remaining, we can use that
@@ -671,7 +671,7 @@ destructureFirstMatch value choices fallback =
 
 withComments :: Comments -> UExpr -> Comments -> UExpr
 withComments [] e [] = e
-withComments pre e post = Fix $ AE $ A FromUpgradeDefinition $ Parens $ Commented pre e post
+withComments pre e post = Fix $ AE $ A FromUpgradeDefinition $ Parens $ C (pre, post) e
 
 
 data DestructureResult a
@@ -699,7 +699,7 @@ instance Monad DestructureResult where
 
 
 {-| Returns `Nothing` if the pattern doesn't match, or `Just` with a list of bound variables if the pattern does match. -}
-destructure :: PreCommented (Pattern (MatchedNamespace [UppercaseIdentifier])) -> PreCommented UExpr -> DestructureResult (Dict.Map LowercaseIdentifier UExpr)
+destructure :: C1 before (Pattern (MatchedNamespace [UppercaseIdentifier])) -> C1 before UExpr -> DestructureResult (Dict.Map LowercaseIdentifier UExpr)
 destructure pat arg =
     let
         namespaceMatch nsd ns =
@@ -710,31 +710,31 @@ destructure pat arg =
     case (pat, fmap dropAnnotation arg) of
         -- Parens in expression
         ( _
-          , (preArg, AST.Expression.Parens (Commented pre inner post))
+          , C preArg (AST.Expression.Parens (C (pre, post) inner))
           )
           ->
-            destructure pat (preArg ++ pre ++ post, inner)
+            destructure pat (C (preArg ++ pre ++ post) inner)
 
         -- Parens in pattern
-        ( (preVar, A _ (PatternParens (Commented pre inner post)))
+        ( C preVar (A _ (PatternParens (C (pre, post) inner)))
           , _
           )
           ->
-            destructure (preVar ++ pre ++ post, inner) arg
+            destructure (C (preVar ++ pre ++ post) inner) arg
 
         -- Wildcard `_` pattern
-        ( (_, A _ Anything), _ ) -> Matches Dict.empty
+        ( C _ (A _ Anything), _ ) -> Matches Dict.empty
 
         -- Unit
-        ( (preVar, A _ (UnitPattern _))
-          , (preArg, AST.Expression.Unit _)
+        ( C preVar (A _ (UnitPattern _))
+          , C preArg (AST.Expression.Unit _)
           )
           ->
             Matches Dict.empty
 
         -- Literals
-        ( (preVar, A _ (AST.Pattern.Literal pat))
-          , (preArg, AST.Expression.Literal val)
+        ( C preVar (A _ (AST.Pattern.Literal pat))
+          , C preArg (AST.Expression.Literal val)
           )
           ->
             -- TODO: handle ints/strings that are equal but have different representations
@@ -744,8 +744,8 @@ destructure pat arg =
                 DoesntMatch
 
         -- Custom type variants with no arguments
-        ( (preVar, A _ (Data (nsd, name) []))
-          , (preArg, VarExpr (TagRef ns tag))
+        ( C preVar (A _ (Data (nsd, name) []))
+          , C preArg (VarExpr (TagRef ns tag))
           )
           ->
             if name == tag && namespaceMatch nsd ns then
@@ -754,8 +754,8 @@ destructure pat arg =
                 DoesntMatch
 
         -- Custom type variants with arguments
-        ( (preVar, A _ (Data (nsd, name) argVars))
-          , (preArg, App (Fix (AE (A _ (VarExpr (TagRef ns tag))))) argValues _)
+        ( C preVar (A _ (Data (nsd, name) argVars))
+          , C preArg (App (Fix (AE (A _ (VarExpr (TagRef ns tag))))) argValues _)
           )
           ->
             if name == tag && namespaceMatch nsd ns then
@@ -764,25 +764,25 @@ destructure pat arg =
                 DoesntMatch
 
         -- Custom type variants where pattern and value don't match in having args
-        ( (_, A _ (Data _ (_:_))), (_, VarExpr (TagRef _ _)) ) -> DoesntMatch
-        ( (_, A _ (Data _ [])), (_, App (Fix (AE (A _ (VarExpr (TagRef _ _))))) _ _) ) -> DoesntMatch
+        ( C _ (A _ (Data _ (_:_))), C _ (VarExpr (TagRef _ _)) ) -> DoesntMatch
+        ( C _ (A _ (Data _ [])), C _ (App (Fix (AE (A _ (VarExpr (TagRef _ _))))) _ _) ) -> DoesntMatch
 
         -- Named variable pattern
-        ( (preVar, A _ (VarPattern name))
-          , (preArg, arg')
+        ( C preVar (A _ (VarPattern name))
+          , C preArg arg'
           ) ->
-            Matches $ Dict.singleton name (withComments (preVar ++ preArg) (snd arg) [])
+            Matches $ Dict.singleton name (withComments (preVar ++ preArg) (dropComments arg) [])
 
         -- `<|` which could be parens in expression
         ( _
-          , (preArg, AST.Expression.Binops e (BinopsClause pre (OpRef (SymbolIdentifier "<|")) post arg1 : rest) ml)
+          , C preArg (AST.Expression.Binops e (BinopsClause pre (OpRef (SymbolIdentifier "<|")) post arg1 : rest) ml)
           )
           ->
-            destructure pat (preArg, Fix $ AE $ A FromSource $ App e [(pre ++ post, Fix $ AE $ A FromSource $ Binops arg1 rest ml)] (FAJoinFirst JoinAll))
+            destructure pat (C preArg $ Fix $ AE $ A FromSource $ App e [(C (pre ++ post) $ Fix $ AE $ A FromSource $ Binops arg1 rest ml)] (FAJoinFirst JoinAll))
 
         -- Tuple with two elements (TODO: generalize this for all tuples)
-        ( (preVar, A _ (AST.Pattern.Tuple [Commented preA (A _ (VarPattern nameA)) postA, Commented preB (A _ (VarPattern nameB)) postB]))
-          , (preArg, AST.Expression.Tuple [Commented preAe eA postAe, Commented preBe eB postBe] _)
+        ( C preVar (A _ (AST.Pattern.Tuple [C (preA, postA) (A _ (VarPattern nameA)), C (preB, postB) (A _ (VarPattern nameB))]))
+          , C preArg (AST.Expression.Tuple [C (preAe, postAe) eA, C (preBe, postBe) eB] _)
           ) ->
             Matches $ Dict.fromList
                 [ (nameA, withComments (preVar ++ preArg) (withComments (preA ++ preAe) eA (postAe ++ postA)) [])
@@ -790,32 +790,30 @@ destructure pat arg =
                 ]
 
         -- Record destructuring
-        ( (preVar, A _ (AST.Pattern.Record varFields))
-          , (preArg, AST.Expression.Record _ argFields _ _)
+        ( C preVar (A _ (AST.Pattern.Record varFields))
+          , C preArg (AST.Expression.Record _ argFields _ _)
           ) ->
             let
                 args :: Dict.Map LowercaseIdentifier UExpr
                 args =
                     argFields
-                        |> fmap snd
-                        |> fmap snd
-                        |> fmap (\(WithEol a _) -> a)
-                        |> fmap (\(Pair (k, _) (_, v) _) -> (k, v))
+                        |> fmap dropComments
+                        |> fmap (\(Pair (C _ k) (C _ v) _) -> (k, v))
                         |> Dict.fromList
 
-                fieldMapping :: Commented LowercaseIdentifier -> Maybe (LowercaseIdentifier, UExpr)
-                fieldMapping (Commented _ var _) =
+                fieldMapping :: C2 before after LowercaseIdentifier -> Maybe (LowercaseIdentifier, UExpr)
+                fieldMapping (C _ var) =
                     (,) var <$> Dict.lookup var args
             in
             Maybe.fromMaybe DoesntMatch $ fmap (Matches . Dict.fromList) $ sequence $ fmap fieldMapping varFields
 
         -- `as`
-        ( (preVar, A _ (AST.Pattern.Alias (p, _) (_, varName)))
+        ( C preVar (A _ (AST.Pattern.Alias (C _ p) (C _ varName)))
           , _
           ) ->
             fmap Dict.unions $ sequence
-                [ destructure (preVar, noRegion $ VarPattern varName) arg
-                , destructure ([], p) arg
+                [ destructure (C preVar $ noRegion $ VarPattern varName) arg
+                , destructure (C [] p) arg
                 ]
 
         -- TODO: handle other patterns
@@ -824,7 +822,7 @@ destructure pat arg =
             CouldMatch
 
 
-simplifyFunctionApplication :: Source -> UExpr -> [PreCommented (UExpr)] -> FunctionApplicationMultiline -> UExpr
+simplifyFunctionApplication :: Source -> UExpr -> [C1 before (UExpr)] -> FunctionApplicationMultiline -> UExpr
 simplifyFunctionApplication appSource fn args appMultiline =
     case (unFix fn, args) of
         (AE (A lambdaSource (Lambda (pat:restVar) preBody body multiline)), arg:restArgs) ->

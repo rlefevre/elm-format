@@ -32,20 +32,20 @@ pleaseReport what details =
 
 
 showModule :: Module -> JSValue
-showModule (Module _ maybeHeader _ (_, imports) body) =
+showModule (Module _ maybeHeader _ (C _ imports) body) =
     let
         header =
             maybeHeader
                 |> Maybe.fromMaybe AST.Module.defaultHeader
 
-        (Header _ (Commented _ name _) _ _) = header
+        (Header _ (C _ name) _ _) = header
 
         getAlias :: ImportMethod -> Maybe UppercaseIdentifier
         getAlias importMethod =
-            fmap (snd . snd) (alias importMethod)
+            fmap dropComments (alias importMethod)
 
         importAliases =
-            Map.fromList $ map (\(k, v) -> (v, k)) $ Map.toList $ Map.mapMaybe (getAlias . snd) imports
+            Map.fromList $ map (\(k, v) -> (v, k)) $ Map.toList $ Map.mapMaybe (getAlias . dropComments) imports
 
         normalizeNamespace :: [UppercaseIdentifier] -> [UppercaseIdentifier]
         normalizeNamespace namespace =
@@ -56,13 +56,13 @@ showModule (Module _ maybeHeader _ (_, imports) body) =
                 _ ->
                     namespace
 
-        importJson (moduleName, (_, ImportMethod alias (_, (_, exposing)))) =
+        importJson (moduleName, C _ (ImportMethod alias (C _ exposing))) =
             let
                 name = List.intercalate "." $ fmap (\(UppercaseIdentifier n) -> n) moduleName
             in
             ( name
             , makeObj
-                [ ( "as", JSString $ toJSString $ maybe name (\(_, (_, UppercaseIdentifier n)) -> n) alias)
+                [ ( "as", JSString $ toJSString $ maybe name (\(C _ (UppercaseIdentifier n)) -> n) alias)
                 , ( "exposing", showImportListingJSON exposing )
                 ]
             )
@@ -78,7 +78,7 @@ data MergedTopLevelStructure ns e
     = MergedDefinition
         { _definitionLocation :: Region.Region
         , _name :: LowercaseIdentifier
-        , _args :: List (PreCommented (Pattern ns))
+        , _args :: List (C1 Before (Pattern ns))
         , _preEquals :: Comments
         , _expression :: e
         , _doc :: Maybe Comment
@@ -92,7 +92,7 @@ mergeDeclarations decls =
     let
         collectAnnotation decl =
             case decl of
-                Entry (A _ (TypeAnnotation (VarRef () name, preColon) (postColon, typ))) -> Just (name, (preColon, postColon, typ))
+                Entry (A _ (TypeAnnotation (C preColon (VarRef () name)) (C postColon typ))) -> Just (name, (preColon, postColon, typ))
                 _ -> Nothing
 
         annotations :: Map.Map LowercaseIdentifier (Comments, Comments, Type [UppercaseIdentifier])
@@ -153,14 +153,14 @@ instance ToJSON UppercaseIdentifier where
 
 showImportListingJSON :: Listing DetailedListing -> JSValue
 showImportListingJSON (ExplicitListing a _) = showJSON a
-showImportListingJSON (OpenListing (Commented _ () _)) = JSString $ toJSString "Everything"
+showImportListingJSON (OpenListing (C _ ())) = JSString $ toJSString "Everything"
 showImportListingJSON ClosedListing = JSNull
 
 
 showTagListingJSON :: Listing (CommentedMap UppercaseIdentifier ()) -> JSValue
 showTagListingJSON (ExplicitListing tags _) =
-    makeObj $ fmap (\(UppercaseIdentifier k, Commented _ () _) -> (k, JSBool True)) $ Map.toList tags
-showTagListingJSON (OpenListing (Commented _ () _)) = JSString $ toJSString "AllTags"
+    makeObj $ fmap (\(UppercaseIdentifier k, C _ ()) -> (k, JSBool True)) $ Map.toList tags
+showTagListingJSON (OpenListing (C _ ())) = JSString $ toJSString "AllTags"
 showTagListingJSON ClosedListing = JSString $ toJSString "NoTags"
 
 
@@ -168,7 +168,7 @@ instance ToJSON DetailedListing where
     showJSON (DetailedListing values _operators types) =
         makeObj
             [ ( "values", makeObj $ fmap (\(LowercaseIdentifier k) -> (k, JSBool True)) $ Map.keys values )
-            , ( "types", makeObj $ fmap (\(UppercaseIdentifier k, (Commented _ (_, listing) _)) -> (k, showTagListingJSON listing)) $ Map.toList types )
+            , ( "types", makeObj $ fmap (\(UppercaseIdentifier k, (C _ (C _ listing))) -> (k, showTagListingJSON listing)) $ Map.toList types )
             ]
 
 
@@ -273,7 +273,7 @@ instance ToJSON Expr where
               makeObj
                   [ type_ "FunctionApplication"
                   , ("function", showJSON expr)
-                  , ("arguments", JSArray $ showJSON <$> map (\(_ , arg) -> arg) args)
+                  , ("arguments", JSArray $ showJSON <$> map dropComments args)
                   ]
 
           Binops first rest _ ->
@@ -299,19 +299,19 @@ instance ToJSON Expr where
                 , ("term", showJSON expr)
                 ]
 
-          Parens (Commented _ expr _) ->
+          Parens (C _ expr) ->
               showJSON expr
 
           ExplicitList terms _ _ ->
               makeObj
                   [ type_ "ListLiteral"
-                  , ("terms", JSArray $ fmap showJSON (map (\(_, (_, WithEol term _)) -> term) terms))
+                  , ("terms", JSArray $ fmap showJSON (map dropComments terms))
                   ]
 
           AST.Expression.Tuple exprs _ ->
               makeObj
                   [ type_ "TupleLiteral"
-                  , ("terms", JSArray $ fmap showJSON (map (\(Commented _ expr _) -> expr) exprs))
+                  , ("terms", JSArray $ fmap showJSON (map dropComments exprs))
                   ]
 
           TupleFunction n | n <= 1 ->
@@ -325,7 +325,7 @@ instance ToJSON Expr where
                   fieldsJSON =
                       ( "fields"
                       , makeObj $ fmap
-                          (\(_, (_, WithEol (Pair (LowercaseIdentifier key, _) (_, value) _) _)) ->
+                          (\(C _ (Pair (C _ (LowercaseIdentifier key)) (C _ value) _)) ->
                              (key, showJSON value)
                           )
                           fields
@@ -335,11 +335,11 @@ instance ToJSON Expr where
                       ( "fieldOrder"
                       , JSArray $
                             fmap (JSString . toJSString) $
-                            fmap (\(_, (_, WithEol (Pair (LowercaseIdentifier key, _) _ _) _)) -> key) fields
+                            fmap (\(C _ (Pair (C _ (LowercaseIdentifier key)) _ _)) -> key) fields
                       )
               in
               case base of
-                  Just (Commented _ (LowercaseIdentifier identifier) _) ->
+                  Just (C _ (LowercaseIdentifier identifier)) ->
                       makeObj
                           [ type_ "RecordUpdate"
                           , ("base", JSString $ toJSString identifier)
@@ -372,13 +372,13 @@ instance ToJSON Expr where
           Lambda parameters _ body _ ->
               makeObj
                   [ type_ "AnonymousFunction"
-                  , ("parameters", JSArray $ map (\(_, A _ pat) -> showJSON pat) parameters)
+                  , ("parameters", JSArray $ map (\(C _ (A _ pat)) -> showJSON pat) parameters)
                   , ("body", showJSON body)
                   ]
 
-          If (IfClause (Commented _ cond' _) (Commented _ thenBody' _)) rest' (_, elseBody) ->
+          If (IfClause (C _ cond') (C _ thenBody')) rest' (C _ elseBody) ->
               let
-                  ifThenElse :: Expr -> Expr -> [(Comments, IfClause Expr)] -> JSValue
+                  ifThenElse :: Expr -> Expr -> [C1 Before (IfClause Expr)] -> JSValue
                   ifThenElse cond thenBody rest =
                       makeObj
                           [ type_ "IfExpression"
@@ -389,7 +389,7 @@ instance ToJSON Expr where
                                 [] ->
                                     showJSON elseBody
 
-                                (_, IfClause (Commented _ nextCond _) (Commented _ nextBody _)) : nextRest ->
+                                C _ (IfClause (C _ nextCond) (C _ nextBody)) : nextRest ->
                                     ifThenElse nextCond nextBody nextRest
                             )
                           ]
@@ -403,13 +403,13 @@ instance ToJSON Expr where
                   , ("body", showJSON body)
                   ]
 
-          Case (Commented _ subject _, _) branches ->
+          Case (C _ subject, _) branches ->
               makeObj
                   [ type_ "CaseExpression"
                   , ( "subject", showJSON subject )
                   , ( "branches"
                     , JSArray $ map
-                        (\(Commented _ (A _ pat) _, (_, body)) ->
+                        (\(CaseBranch _ _ _ (A _ pat) body) ->
                            makeObj
                                [ ("pattern", showJSON pat)
                                , ("body", showJSON body)
@@ -480,7 +480,7 @@ instance ToJSON (Type [UppercaseIdentifier]) where
                     [ type_ "TypeReference"
                     , ( "name", showJSON name )
                     , ( "module", showJSON namespace )
-                    , ( "arguments", JSArray $ fmap (showJSON . snd) args )
+                    , ( "arguments", JSArray $ fmap (showJSON . dropComments) args )
                     ]
 
             TypeVariable (LowercaseIdentifier name) ->
@@ -491,25 +491,25 @@ instance ToJSON (Type [UppercaseIdentifier]) where
 
             FunctionType first rest _ ->
                 case firstRestToRestLast first rest of
-                    (args, WithEol last _) ->
+                    (args, C _ last) ->
                         makeObj
                             [ type_ "FunctionType"
                             , ( "returnType", showJSON last)
-                            , ( "argumentTypes", JSArray $ fmap (\(WithEol t _, _, _) -> showJSON t) $ args )
+                            , ( "argumentTypes", JSArray $ fmap (\(C _ t) -> showJSON t) $ args )
                             ]
 
             _ ->
                 JSString $ toJSString $ "TODO: Type (" ++ show type' ++ ")"
         where
-            firstRestToRestLast :: WithEol x -> List (a, (b, (WithEol x))) -> (List (WithEol x, a, b), WithEol x)
+            firstRestToRestLast :: C0Eol x -> List (C2Eol a b x) -> (List (C2Eol a b x), C0Eol x)
             firstRestToRestLast first rest =
                 done $ foldl (flip step) (ReversedList.empty, first) rest
                 where
-                    step :: (a, (b, WithEol x)) -> (Reversed (WithEol x, a, b), WithEol x) -> (Reversed (WithEol x, a, b), WithEol x)
-                    step (a, (b, WithEol next dn)) (acc, last) =
-                        (ReversedList.push (last, a, b) acc, WithEol next dn)
+                    step :: C2Eol a b x -> (Reversed (C2Eol a b x), C0Eol x) -> (Reversed (C2Eol a b x), C0Eol x)
+                    step (C (a, b, dn) next) (acc, C dn' last) =
+                        (ReversedList.push (C (a, b, dn') last) acc, C dn next)
 
-                    done :: (Reversed (WithEol x, a, b), WithEol x) -> (List (WithEol x, a, b), WithEol x)
+                    done :: (Reversed (C2Eol a b x), C0Eol x) -> (List (C2Eol a b x), C0Eol x)
                     done (acc, last) =
                         (ReversedList.toList acc, last)
 

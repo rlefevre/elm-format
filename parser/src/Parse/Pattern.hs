@@ -44,7 +44,7 @@ asPattern elmVersion patternParser =
       case maybeAlias of
         Just (postPattern, alias) ->
             do  end <- getMyPosition
-                return $ A.at start end $ P.Alias (pattern, postPattern) alias
+                return $ A.at start end $ P.Alias (C postPattern pattern) alias
 
         Nothing ->
             return pattern
@@ -53,7 +53,7 @@ asPattern elmVersion patternParser =
       do  preAs <- try (whitespace <* reserved elmVersion "as")
           postAs <- whitespace
           var <- lowVar elmVersion
-          return (preAs, (postAs, var))
+          return (preAs, C postAs var)
 
 
 record :: ElmVersion -> IParser (Pattern [UppercaseIdentifier])
@@ -81,7 +81,7 @@ tuple elmVersion =
           Right [] ->
             A.at start end $ P.UnitPattern []
 
-          Right [Commented [] pattern []] ->
+          Right [C ([], []) pattern] ->
             pattern
 
           Right [pattern] ->

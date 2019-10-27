@@ -16,9 +16,14 @@ tests :: TestTree
 tests =
     testGroup "ElmFormat.ImportInfo" $
     let
+        makeEntry (a, b, c) =
+            ( fmap UppercaseIdentifier a
+            , ImportMethod (fmap (C ([], []) . UppercaseIdentifier) b) (C ([], []) c)
+            )
+
         buildImportInfo i =
             i
-                |> fmap (\(a, b, c) -> (fmap UppercaseIdentifier a, ImportMethod (fmap (\x -> ([], ([], UppercaseIdentifier x))) b) ([], ([], c))))
+                |> fmap makeEntry
                 |> Dict.fromList
                 |> ImportInfo.fromImports (const mempty)
     in
@@ -53,19 +58,19 @@ tests =
         ]
     , testGroup "_exposed" $
         [ testCase "includes exposed values" $
-            buildImportInfo [(["B"], Nothing, ExplicitListing (DetailedListing (Dict.singleton (LowercaseIdentifier "oldValue") (Commented [] () [])) mempty mempty) False )]
+            buildImportInfo [(["B"], Nothing, ExplicitListing (DetailedListing (Dict.singleton (LowercaseIdentifier "oldValue") (C ([], []) ())) mempty mempty) False )]
                 |> ImportInfo._exposed
                 |> Dict.lookup (LowercaseIdentifier "oldValue")
                 |> assertEqual "contains oldValue" (Just [UppercaseIdentifier "B"])
         , testCase "includes Html.Attributes.style" $
-            buildImportInfo [(["Html", "Attributes"], Nothing, OpenListing (Commented [] () []))]
+            buildImportInfo [(["Html", "Attributes"], Nothing, OpenListing (C ([], []) ()))]
                 |> ImportInfo._exposed
                 |> Dict.lookup (LowercaseIdentifier "style")
                 |> assertEqual "contains style" (Just [UppercaseIdentifier "Html", UppercaseIdentifier "Attributes"])
         ]
     , testGroup "_exposedTypes" $
         [ testCase "includes exposed types" $
-            buildImportInfo [(["B"], Nothing, ExplicitListing (DetailedListing mempty mempty (Dict.singleton (UppercaseIdentifier "OldType") (Commented [] ([], ClosedListing) []))) False )]
+            buildImportInfo [(["B"], Nothing, ExplicitListing (DetailedListing mempty mempty (Dict.singleton (UppercaseIdentifier "OldType") (C ([], []) (C [] ClosedListing)))) False )]
                 |> ImportInfo._exposedTypes
                 |> Dict.lookup (UppercaseIdentifier "OldType")
                 |> assertEqual "contains OldType" (Just [UppercaseIdentifier "B"])
